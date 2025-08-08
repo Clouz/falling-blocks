@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.1 PWA</title>
+  <title>Falling Blocks – v8.2 PWA</title>
   <style>
     :root{
       --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14;
@@ -92,7 +92,7 @@
 
 <script>
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v81';
+const SETTINGS_KEY='fb_settings_v82';
 const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark' };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
@@ -234,7 +234,6 @@ function lockPiece(){
   if(overflow){ return gameOver(); }
   clearLines();
   spawnFromNext(); refillNext();
-  // niente game over laterale: il collides ai lati impedisce l'uscita
 }
 function clearLines(){
   let cleared=0;
@@ -332,8 +331,8 @@ function loop(ts){
 }
 requestAnimationFrame(loop);
 
-/* ====================== INPUT: touch + mouse ====================== */
-let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false};
+/* ====================== INPUT: touch + mouse (con gesto robusto) ====================== */
+let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false, gesture:null};
 const TAP_MAX_RADIUS=6;
 function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
 function clampX(){
@@ -345,7 +344,7 @@ function clampX(){
 function onDown(e){
   if(st.over){ startGame(); pauseOverlay.style.display='none'; }
   const p=getPoint(e);
-  touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false};
+  touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false, gesture:null};
   e.preventDefault();
 }
 function onMove(e){
@@ -355,33 +354,52 @@ function onMove(e){
   touch.x=p.x; touch.y=p.y;
   if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true;
 
-  // drag orizzontale con step = sensibilità
-  touch.accumX += dx;
-  while(Math.abs(touch.accumX) >= settings.hstep){
-    const step = touch.accumX>0 ? 1 : -1;
-    tryMove(step,0);
-    touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep);
-  }
-  clampX();
-
-  // swipe giù
-  if(dy > SWIPE_DOWN_PX){
-    touch.swipingDown = true;
-    if(settings.dropMode==='soft'){
-      for(let i=0;i<2;i++){ if(!tryMove(0,1)) { lockPiece(); break; } }
+  // decide gesto: swipeDown solo se prevale l'asse Y
+  const totalDx = Math.abs(p.x - touch.x0);
+  const totalDy = Math.abs(p.y - touch.y0);
+  if(!touch.gesture){
+    if(totalDy > SWIPE_DOWN_PX && totalDy > totalDx * 1.2){
+      touch.gesture = 'swipeDown';
+      touch.swipingDown = true;
+    } else if(totalDx > settings.hstep && totalDx > totalDy){
+      touch.gesture = 'dragX';
     }
+  }
+
+  // Se stiamo swipando giù con hard drop, blocca il movimento orizzontale
+  const allowHorizontal = !(touch.gesture==='swipeDown' && settings.dropMode==='hard');
+
+  // drag orizzontale a passi
+  if(allowHorizontal){
+    touch.accumX += dx;
+    while(Math.abs(touch.accumX) >= settings.hstep){
+      const step = touch.accumX>0 ? 1 : -1;
+      tryMove(step,0);
+      touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep);
+    }
+    clampX();
+  }
+
+  // swipe giù (soft = accelerazione continua)
+  if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){
+    for(let i=0;i<2;i++){ if(!tryMove(0,1)) { lockPiece(); break; } }
   }
   e.preventDefault();
 }
 function onUp(e){
   if(!touch.active) return;
-  const now=performance.now();
-  const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0);
-  const duration=now-touch.t0;
-  const downSwipe = touch.swipingDown || (touch.y - touch.y0) > SWIPE_DOWN_PX;
   touch.active=false;
   if(st.over) return;
-  if(downSwipe){ if(settings.dropMode==='hard'){ hardDrop(); } return; }
+
+  // hard drop solo se il gesto riconosciuto è swipeDown
+  if(touch.gesture==='swipeDown'){
+    if(settings.dropMode==='hard'){ hardDrop(); }
+    return;
+  }
+
+  // Tap = rotate
+  const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0);
+  const duration=performance.now()-touch.t0;
   if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); }
   e.preventDefault();
 }
@@ -416,7 +434,7 @@ if('serviceWorker' in navigator){
   const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
   if(secure){
     const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })();
-    const swPath = basePath + 'sw.js?v=8pwa3';
+    const swPath = basePath + 'sw.js?v=8pwa4';
     navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err));
   }
 }
