@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.3 PWA</title>
+  <title>Falling Blocks – v8.4 PWA</title>
   <style>
     :root{
       --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14;
@@ -93,7 +93,7 @@
     </form>
   </dialog><script>
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v83';
+const SETTINGS_KEY='fb_settings_v84';
 const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0 };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
@@ -115,7 +115,7 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 const COLS=10, ROWS=20;
 const COLORS=["#000000","#00d1ff","#f9c80e","#ff6b6b","#6a4c93","#2ec4b6","#ffd166","#06d6a0"];
 const SCORE_TABLE={1:100,2:300,3:500,4:800};
-const CLEAR_ANIM_MS = 280; // sweep delle linee
+const CLEAR_ANIM_MS = 120; // flash rapido sull'intera riga
 const SWIPE_DOWN_PX=40; const TAP_MAX_MOVE=10, TAP_MAX_MS=250; const TAP_MAX_RADIUS=6;
 
 const canvas=document.getElementById('c');
@@ -153,7 +153,6 @@ document.getElementById('saveBtn').addEventListener('click', (e)=>{
   settings.dropMode=dropSelect.value; settings.grid=!!gridToggle.checked; settings.theme=themeSel.value;
   settings.debug=!!dbgToggle.checked; settings.startLevel=parseInt(startLevelSel.value,10);
   saveSettings(); applyTheme(); refreshOptionsUI(); optModal.close();
-  // se cambi lo start level a partita ferma, riparti
   if(st.paused||st.over) { startGame(); pauseOverlay.style.display='none'; }
 });
 
@@ -199,8 +198,7 @@ function startClearAnim(rows){ rows.sort((a,b)=>b-a); st.clearAnim = { rows, t:0
 function commitClearRows(rows){ const cleared = rows.length; for(const y of rows){ st.board.splice(y,1); st.board.unshift(new Array(COLS).fill(0)); }
   st.lines += cleared; let base = (SCORE_TABLE[cleared] || 0) * st.level; const difficult = (cleared === 4); if (difficult && st.b2b) base = Math.round(base * 1.5); st.b2b = difficult ? true : false; st.combo = (st.combo||0) + 1; const comboBonus = 50 * st.combo * st.level; st.score += base + comboBonus; setLevelByLines(); if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); spawnFromNext(); refillNext(); }
 
-function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const by=st.cur.y+y; if(by<0){ overflow=true; } else { st.board[by][st.cur.x+x]=st.cur.color; } } } } if(overflow){ return gameOver(); } const rows = getFullRows(); if(rows.length){ startClearAnim(rows); } else { st.combo = 0; // reset combo se nessuna riga
-    spawnFromNext(); refillNext(); }
+function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const by=st.cur.y+y; if(by<0){ overflow=true; } else { st.board[by][st.cur.x+x]=st.cur.color; } } } } if(overflow){ return gameOver(); } const rows = getFullRows(); if(rows.length){ startClearAnim(rows); } else { st.combo = 0; spawnFromNext(); refillNext(); }
 }
 
 /* ====================== DRAW ====================== */
@@ -208,7 +206,8 @@ function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canv
   if(settings.grid){ ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#ffffff14'; ctx.lineWidth=1; for(let x=0;x<=COLS;x++){ ctx.beginPath(); ctx.moveTo(offX+x*CELL, offY); ctx.lineTo(offX+x*CELL, offY+ROWS*CELL); ctx.stroke(); } for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); } }
   for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const v=st.board[y][x]; if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v], 1); } } }
   if(st.cur){ let gy=st.cur.y; while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++; const s=currentShape(); for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL; if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color], 0.25); } } } for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL; if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color], 1); } } } }
-  if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const sweepW = Math.floor(COLS*CELL * p); for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.globalAlpha = 0.35 * (1 - p); ctx.fillStyle = '#ffffff'; ctx.fillRect(offX, rowY, COLS*CELL, CELL); ctx.globalAlpha = 0.6; ctx.fillRect(offX, rowY, sweepW, CELL); ctx.globalAlpha = 0.18; ctx.strokeStyle = '#ffffff'; ctx.strokeRect(offX+0.5, rowY+0.5, COLS*CELL-1, CELL-1); ctx.globalAlpha = 1; } }
+  // Flash intero sulle righe che stanno per sparire
+  if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const alpha = 0.5 * (1 - p); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff'; for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.fillRect(offX, rowY, COLS*CELL, CELL); } ctx.globalAlpha = 1; }
 }
 function drawCell(x,y,color,alpha=1){ const r=CELL*0.18; ctx.globalAlpha = alpha; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha = alpha * 0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha = 1; }
 function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
@@ -242,7 +241,7 @@ let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
 
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa5'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
+if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa6'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
 
 /* ====================== START ====================== */
 startGame();
