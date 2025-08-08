@@ -1,13 +1,18 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#0e0e12" />
+  <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v7 PWA</title>
+  <title>Falling Blocks – v8 PWA</title>
   <style>
-    :root{ --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; }
+    :root{
+      --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14;
+    }
+    [data-theme="light"]{
+      --bg:#f7f7fb; --panel:#ffffff; --card:#ffffff; --fg:#0f1020; --acc:#3a86ff; --grid:#00000014;
+    }
     html, body { margin:0; padding:0; background:var(--bg); height:100%; color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
     #wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px }
     #hud { display:flex; width:100%; max-width:480px; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap }
@@ -15,13 +20,13 @@
     .big { font-weight:800; font-size:18px }
     button { appearance:none; border:0; background:var(--acc); color:#fff; padding:10px 14px; font-weight:800; border-radius:12px }
     #game { position:relative }
-    canvas { background:var(--panel); border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.45); touch-action:none }
+    canvas { background:var(--panel); border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.2); touch-action:none }
     #hint { opacity:.75; font-size:12px; text-align:center; max-width:480px; line-height:1.3 }
-    #pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55); border-radius:16px; font-size:20px; font-weight:800; text-align:center; white-space:pre-line; padding:20px }
-    dialog { border:0; border-radius:16px; background:#15151c; color:#e9e9ef; width:min(92vw, 460px); }
-    dialog::backdrop { background:rgba(0,0,0,.55); }
+    #pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); border-radius:16px; font-size:20px; font-weight:800; text-align:center; white-space:pre-line; padding:20px }
+    dialog { border:0; border-radius:16px; background:var(--card); color:var(--fg); width:min(92vw, 460px); }
+    dialog::backdrop { background:rgba(0,0,0,.45); }
     .row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; }
-    .row + .row { border-top: 1px solid #262635; }
+    .row + .row { border-top: 1px solid #26263522; }
     label { font-weight:600; }
     input[type=range] { width: 160px; }
     select, input[type=checkbox] { accent-color: var(--acc); }
@@ -44,8 +49,8 @@
       <canvas id="c"></canvas>
       <div id="pause">PAUSA</div>
     </div>
-    <div id="hint">Controlli: tieni premuto e trascina orizzontalmente per muovere • Tap = ruota • Swipe ↓ = caduta (hard/soft a scelta)</div>
-    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:480px; background:#0008; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] avvio</div>
+    <div id="hint">Controlli: trascina orizzontalmente per muovere • Tap = ruota • Swipe ↓ = caduta (hard/soft a scelta)</div>
+    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:480px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] avvio</div>
   </div>
 
   <dialog id="optModal">
@@ -63,6 +68,18 @@
         </select>
       </div>
       <div class="row">
+        <label for="gridToggle">Griglia</label>
+        <input id="gridToggle" type="checkbox">
+      </div>
+      <div class="row">
+        <label for="themeSel">Tema</label>
+        <select id="themeSel">
+          <option value="dark">Scuro</option>
+          <option value="light">Chiaro</option>
+          <option value="system">Sistema</option>
+        </select>
+      </div>
+      <div class="row">
         <label for="dbgToggle">Schermata debug</label>
         <input id="dbgToggle" type="checkbox">
       </div>
@@ -74,24 +91,34 @@
   </dialog>
 
 <script>
-// ===== SETTINGS =============================================================
-const SETTINGS_KEY='fb_settings_v7';
-const DefaultSettings = { hstep:18, dropMode:'hard', debug:false };
+/* ====================== SETTINGS & THEME ====================== */
+const SETTINGS_KEY='fb_settings_v8';
+const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark' };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
 function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
 
 const dbgEl = document.getElementById('debug');
-function dbg(msg){ if(!settings.debug) return; console.log('[FB]', msg); dbgEl.textContent += '\n' + msg; }
+function dbg(msg){ if(!settings.debug) return; console.log('[FB]', msg); dbgEl.textContent += '\\n' + msg; }
 
-// ===== CONFIG ==============================================================
+function applyTheme(){
+  let theme = settings.theme;
+  if(theme==='system'){
+    theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeColor').setAttribute('content', theme==='light' ? '#ffffff' : '#0e0e12');
+}
+applyTheme();
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()=>{ if(settings.theme==='system') applyTheme(); });
+
+/* ====================== CONFIG ====================== */
 const COLS=10, ROWS=20;
 const COLORS=["#000000","#00d1ff","#f9c80e","#ff6b6b","#6a4c93","#2ec4b6","#ffd166","#06d6a0"];
 const SCORE_TABLE={1:100,2:300,3:500,4:800};
 const GRAVITY_BASE_MS=800, GRAVITY_STEP_MS=60, GRAVITY_MIN_MS=80;
 const SWIPE_DOWN_PX=40;
 const TAP_MAX_MOVE=10, TAP_MAX_MS=250;
-const LONG_MS=500;
 
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -102,24 +129,61 @@ const optModal=document.getElementById('optModal');
 const sensInput=document.getElementById('sens');
 const sensVal=document.getElementById('sensVal');
 const dropSelect=document.getElementById('dropMode');
+const gridToggle=document.getElementById('gridToggle');
+const themeSel=document.getElementById('themeSel');
 const dbgToggle=document.getElementById('dbgToggle');
 const installBtn=document.getElementById('installBtn');
 
-function refreshOptionsUI(){ sensInput.value = String(settings.hstep); sensVal.textContent = settings.hstep+' px'; dropSelect.value = settings.dropMode; dbgToggle.checked = settings.debug; dbgEl.style.display = settings.debug ? 'block' : 'none'; }
+function refreshOptionsUI(){
+  sensInput.value = String(settings.hstep);
+  sensVal.textContent = settings.hstep+' px';
+  dropSelect.value = settings.dropMode;
+  gridToggle.checked=settings.grid;
+  themeSel.value=settings.theme;
+  dbgToggle.checked = settings.debug;
+  dbgEl.style.display = settings.debug ? 'block' : 'none';
+}
 refreshOptionsUI();
 
 optBtn.addEventListener('click', ()=>{ refreshOptionsUI(); optModal.showModal(); });
-document.getElementById('saveBtn').addEventListener('click', (e)=>{ e.preventDefault(); settings.hstep=parseInt(sensInput.value,10); settings.dropMode=dropSelect.value; settings.debug=!!dbgToggle.checked; saveSettings(); refreshOptionsUI(); optModal.close(); });
+document.getElementById('saveBtn').addEventListener('click', (e)=>{
+  e.preventDefault();
+  settings.hstep=parseInt(sensInput.value,10);
+  settings.dropMode=dropSelect.value;
+  settings.grid=!!gridToggle.checked;
+  settings.theme=themeSel.value;
+  settings.debug=!!dbgToggle.checked;
+  saveSettings(); applyTheme(); refreshOptionsUI(); optModal.close();
+});
 
+/* ====================== LAYOUT ====================== */
 let CELL=28, SIDE_W=0, TOTAL_W=0, TOTAL_H=0;
-function resizeCanvas(){ const maxW=Math.min(480, window.innerWidth-20); CELL=Math.floor(maxW/(COLS+6)); SIDE_W=CELL*5; TOTAL_W=CELL*COLS + SIDE_W + CELL; TOTAL_H=CELL*(ROWS+2); canvas.width=TOTAL_W; canvas.height=TOTAL_H; dbg('resize: CELL='+CELL+' W='+TOTAL_W+' H='+TOTAL_H); }
+function resizeCanvas(){
+  const maxW=Math.min(480, window.innerWidth-20);
+  CELL=Math.floor(maxW/(COLS+6));
+  SIDE_W=CELL*5;
+  TOTAL_W=CELL*COLS + SIDE_W + CELL;
+  TOTAL_H=CELL*(ROWS+2);
+  canvas.width=TOTAL_W; canvas.height=TOTAL_H;
+  dbg('resize: CELL='+CELL+' W='+TOTAL_W+' H='+TOTAL_H);
+}
 window.addEventListener('resize', resizeCanvas); resizeCanvas();
 
-const ROT = { O:[[[1,1],[1,1]]], I:[[[1,1,1,1]], [[1],[1],[1],[1]]], S:[[[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]]], Z:[[[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]]], L:[[[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]]], J:[[[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]]], T:[[[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]], [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]]], };
+/* ====================== PIECES ====================== */
+const ROT = {
+  O:[[[1,1],[1,1]]],
+  I:[[[1,1,1,1]], [[1],[1],[1],[1]]],
+  S:[[[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]]],
+  Z:[[[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]]],
+  L:[[[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]]],
+  J:[[[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]]],
+  T:[[[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]], [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]]],
+};
 const PIECES=['I','O','T','S','Z','J','L'];
 function newBag(){ const b=PIECES.slice(); for(let i=b.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [b[i],b[j]]=[b[j],b[i]]; } return b; }
 function makePiece(type){ const r=0; const s=ROT[type][r]; const color=PIECES.indexOf(type)+1; const x=((COLS-s[0].length)/2)|0; const y=-2; return {type,r,x,y,color}; }
 
+/* ====================== GAME STATE ====================== */
 function emptyBoard(){ const b=[]; for(let y=0;y<ROWS;y++){ const row=new Array(COLS); for(let x=0;x<COLS;x++) row[x]=0; b.push(row);} return b; }
 const st={ board:emptyBoard(), cur:null, next:makePiece('I'), bag:newBag(), score:0, lines:0, level:1, best:Number(localStorage.getItem('fb_highscore')||0), dropMs:GRAVITY_BASE_MS, accMs:0, paused:false, over:false, lastTap:0 };
 
@@ -131,6 +195,7 @@ function spawnFromNext(){ st.cur = Object.assign({}, st.next); const s=currentSh
 function refillNext(){ if(st.bag.length===0) st.bag=newBag(); const t=st.bag.pop(); st.next = makePiece(t); }
 function startGame(){ st.board=emptyBoard(); st.score=0; st.lines=0; st.level=1; st.dropMs=GRAVITY_BASE_MS; st.accMs=0; st.paused=false; st.over=false; setLevelByLines(); updateHUD(); st.bag=newBag(); st.next=makePiece('I'); spawnFromNext(); refillNext(); }
 
+/* ====================== COLLISIONS / BOARD OPS ====================== */
 function collides(p=st.cur, dx=0, dy=0, r=p.r){ const shape=ROT[p.type][r]; for(let y=0;y<shape.length;y++){ for(let x=0;x<shape[0].length;x++){ if(!shape[y][x]) continue; const nx=p.x+x+dx, ny=p.y+y+dy; if(ny<0) continue; if(nx<0||nx>=COLS||ny>=ROWS) return true; if(st.board[ny][nx]) return true; } } return false; }
 function tryMove(dx,dy){ if(!collides(st.cur,dx,dy,st.cur.r)){ st.cur.x+=dx; st.cur.y+=dy; return true;} return false; }
 function tryRotate(){ let nr=(st.cur.r+1)%ROT[st.cur.type].length; if(!collides(st.cur,0,0,nr)) { st.cur.r=nr; return true; } if(!collides(st.cur,-1,0,nr)) { st.cur.x-=1; st.cur.r=nr; return true; } if(!collides(st.cur,1,0,nr)) { st.cur.x+=1; st.cur.r=nr; return true; } return false; }
@@ -156,27 +221,106 @@ function lockPiece(){
 function clearLines(){ let cleared=0; for(let y=ROWS-1;y>=0;y--){ if(st.board[y].every(v=>v!==0)){ st.board.splice(y,1); st.board.unshift(new Array(COLS).fill(0)); cleared++; y++; } } if(cleared){ st.lines+=cleared; st.score += (SCORE_TABLE[cleared]||0)*st.level; setLevelByLines(); if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); } }
 function gameOver(){ st.over=true; st.paused=true; pauseOverlay.textContent = `GAME OVER\nPunti: ${st.score}\nTocca per ricominciare`; pauseOverlay.style.display='flex'; }
 
-function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle="#0f0f17"; ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4); for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const v=st.board[y][x]; if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v]); } else { ctx.globalAlpha=0.08; ctx.fillStyle="#fff"; ctx.fillRect(offX+x*CELL+CELL-1, offY+y*CELL, 1, CELL); ctx.fillRect(offX+x*CELL, offY+y*CELL+CELL-1, CELL, 1); ctx.globalAlpha=1; } } } if(st.cur){ const s=currentShape(); for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL; if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color]); } } } } }
+/* ====================== DRAW (grid + ghost) ====================== */
+function draw(){
+  const offX=CELL, offY=CELL;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#14141b';
+  ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4);
+
+  if(settings.grid){
+    ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#ffffff14';
+    ctx.lineWidth=1;
+    for(let x=0;x<=COLS;x++){ ctx.beginPath(); ctx.moveTo(offX+x*CELL, offY); ctx.lineTo(offX+x*CELL, offY+ROWS*CELL); ctx.stroke(); }
+    for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); }
+  }
+
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){
+      const v=st.board[y][x];
+      if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v]); }
+    }
+  }
+
+  if(st.cur){
+    // Ghost piece
+    let gy=st.cur.y;
+    while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++;
+    const s=currentShape();
+    ctx.globalAlpha=0.25;
+    for(let y=0;y<s.length;y++){
+      for(let x=0;x<s[0].length;x++){
+        if(s[y][x]){
+          const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL;
+          if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color]);
+        }
+      }
+    }
+    ctx.globalAlpha=1;
+
+    // Current piece
+    for(let y=0;y<s.length;y++){
+      for(let x=0;x<s[0].length;x++){
+        if(s[y][x]){
+          const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL;
+          if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color]);
+        }
+      }
+    }
+  }
+}
 function drawCell(x,y,color){ const r=CELL*0.18; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha=0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha=1; }
 function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
 
+/* ====================== LOOP ====================== */
 let lastTs=performance.now();
 function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(!st.paused){ st.accMs+=dt; if(st.accMs>=st.dropMs){ st.accMs=0; if(!tryMove(0,1)) lockPiece(); } } draw(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
-// Touch input
-let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, long:false, tid:null, swipingDown:false};
+/* ====================== INPUT (no long-press pause) ====================== */
+let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false};
+const TAP_MAX_RADIUS=6;
 function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
-function onDown(e){ if(st.over){ startGame(); pauseOverlay.style.display='none'; } const p=getPoint(e); touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0,long:false,tid:setTimeout(()=>{ touch.long=true; togglePause(); },LONG_MS), swipingDown:false}; e.preventDefault(); }
-function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>6) touch.moved=true; touch.accumX += dx; while(Math.abs(touch.accumX) >= settings.hstep){ const step = touch.accumX>0 ? 1 : -1; tryMove(step,0); touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep); } if(dy > SWIPE_DOWN_PX){ touch.swipingDown = true; if(settings.dropMode==='soft'){ for(let i=0;i<2;i++){ if(!tryMove(0,1)) { lockPiece(); break; } } } } e.preventDefault(); }
-function onUp(e){ if(!touch.active) return; clearTimeout(touch.tid); const now=performance.now(); const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0); const duration=now-touch.t0; const downSwipe = touch.swipingDown || (touch.y - touch.y0) > SWIPE_DOWN_PX; touch.active=false; if(st.over) return; if(touch.long) return; if(downSwipe){ if(settings.dropMode==='hard'){ hardDrop(); } return; } if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); } e.preventDefault(); }
-canvas.addEventListener('touchstart', onDown, {passive:false}); canvas.addEventListener('touchmove',  onMove, {passive:false}); canvas.addEventListener('touchend',   onUp,   {passive:false});
-canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+function onDown(e){ if(st.over){ startGame(); pauseOverlay.style.display='none'; } const p=getPoint(e); touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false}; e.preventDefault(); }
+function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true;
+  touch.accumX += dx;
+  while(Math.abs(touch.accumX) >= settings.hstep){
+    const step = touch.accumX>0 ? 1 : -1;
+    tryMove(step,0);
+    touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep);
+  }
+  if(dy > SWIPE_DOWN_PX){
+    touch.swipingDown = true;
+    if(settings.dropMode==='soft'){
+      for(let i=0;i<2;i++){ if(!tryMove(0,1)) { lockPiece(); break; } }
+    }
+  }
+  e.preventDefault();
+}
+function onUp(e){
+  if(!touch.active) return;
+  const now=performance.now();
+  const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0);
+  const duration=now-touch.t0;
+  const downSwipe = touch.swipingDown || (touch.y - touch.y0) > SWIPE_DOWN_PX;
+  touch.active=false;
+  if(st.over) return;
+  if(downSwipe){ if(settings.dropMode==='hard'){ hardDrop(); } return; }
+  if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); }
+  e.preventDefault();
+}
+
+canvas.addEventListener('touchstart', onDown, {passive:false});
+canvas.addEventListener('touchmove',  onMove, {passive:false});
+canvas.addEventListener('touchend',   onUp,   {passive:false});
+canvas.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
 
 btn.addEventListener('click', ()=> togglePause());
 function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSA' : ''; }
 
-// PWA install prompt + SW registration (robusto per GitHub Pages)
+/* ====================== PWA (install + SW) ====================== */
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
@@ -185,12 +329,12 @@ if('serviceWorker' in navigator){
   const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
   if(secure){
     const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })();
-    const swPath = basePath + 'sw.js?v=7pwa';
+    const swPath = basePath + 'sw.js?v=8pwa';
     navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err));
   }
 }
 
-// start
+/* ====================== START ====================== */
 startGame();
 dbg('boot ok');
 </script>
