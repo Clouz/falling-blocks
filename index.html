@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.4 PWA</title>
+  <title>Falling Blocks – v8.4.1 PWA</title>
   <style>
     :root{
       --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14;
@@ -93,7 +93,7 @@
     </form>
   </dialog><script>
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v84';
+const SETTINGS_KEY='fb_settings_v841';
 const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0 };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
@@ -169,7 +169,7 @@ function makePiece(type){ const r=0; const s=ROT[type][r]; const color=PIECES.in
 
 /* ====================== STATE ====================== */
 function emptyBoard(){ const b=[]; for(let y=0;y<ROWS;y++){ const row=new Array(COLS); for(let x=0;x<COLS;x++) row[x]=0; b.push(row);} return b; }
-const st={ board:emptyBoard(), cur:null, next:makePiece('I'), bag:newBag(), score:0, lines:0, level:1, best:Number(localStorage.getItem('fb_highscore')||0), dropMs:800, accMs:0, paused:false, over:false, startLevel:settings.startLevel, combo:0, b2b:false, clearAnim:null };
+let st={ board:emptyBoard(), cur:null, next:makePiece('I'), bag:newBag(), score:0, lines:0, level:1, best:Number(localStorage.getItem('fb_highscore')||0), dropMs:800, accMs:0, paused:false, over:false, startLevel:settings.startLevel, combo:0, b2b:false, clearAnim:null };
 
 // opzionale: override da URL ?start=...
 (function(){ const m = new URLSearchParams(location.search).get('start'); const n = m!=null ? Math.max(0, Math.min(19, parseInt(m,10)||0)) : null; if(n!=null){ st.startLevel = n; settings.startLevel = n; saveSettings(); } })();
@@ -194,9 +194,8 @@ function softDropStep(){ if(tryMove(0,1)) { st.score += 1; if(st.score>st.best){
 
 /* ====================== LINE CLEAR (anim + commit) ====================== */
 function getFullRows(){ const rows=[]; for(let y=ROWS-1;y>=0;y--){ if(st.board[y].every(v=>v!==0)) rows.push(y); } return rows; }
-function startClearAnim(rows){ rows.sort((a,b)=>b-a); st.clearAnim = { rows, t:0, dur:CLEAR_ANIM_MS }; }
-function commitClearRows(rows){ const cleared = rows.length; for(const y of rows){ st.board.splice(y,1); st.board.unshift(new Array(COLS).fill(0)); }
-  st.lines += cleared; let base = (SCORE_TABLE[cleared] || 0) * st.level; const difficult = (cleared === 4); if (difficult && st.b2b) base = Math.round(base * 1.5); st.b2b = difficult ? true : false; st.combo = (st.combo||0) + 1; const comboBonus = 50 * st.combo * st.level; st.score += base + comboBonus; setLevelByLines(); if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); spawnFromNext(); refillNext(); }
+function startClearAnim(rows){ const uniq = Array.from(new Set(rows)).sort((a,b)=>a-b); st.clearAnim = { rows: uniq, t: 0, dur: CLEAR_ANIM_MS, active: true }; }
+function commitClearRows(rows){ if (!rows || !rows.length) { st.combo = 0; spawnFromNext(); refillNext(); return; } const kill = new Set(rows); const kept=[]; for(let y=0;y<ROWS;y++){ if(!kill.has(y)) kept.push(st.board[y]); } while(kept.length < ROWS) kept.unshift(new Array(COLS).fill(0)); st.board = kept; const cleared = rows.length; st.lines += cleared; let base = (SCORE_TABLE[cleared] || 0) * st.level; const difficult = (cleared === 4); if (difficult && st.b2b) base = Math.round(base * 1.5); st.b2b = difficult ? true : false; st.combo = (st.combo||0) + 1; const comboBonus = 50 * st.combo * st.level; st.score += base + comboBonus; setLevelByLines(); if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); st.clearAnim = null; spawnFromNext(); refillNext(); }
 
 function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const by=st.cur.y+y; if(by<0){ overflow=true; } else { st.board[by][st.cur.x+x]=st.cur.color; } } } } if(overflow){ return gameOver(); } const rows = getFullRows(); if(rows.length){ startClearAnim(rows); } else { st.combo = 0; spawnFromNext(); refillNext(); }
 }
@@ -214,7 +213,7 @@ function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2;
 
 /* ====================== LOOP ====================== */
 let lastTs=performance.now();
-function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur){ const rows = st.clearAnim.rows.slice(); st.clearAnim = null; commitClearRows(rows); } } else { if(!st.paused){ st.accMs += dt; if(st.accMs >= st.dropMs){ st.accMs = 0; if(!tryMove(0,1)) lockPiece(); } } } draw(); requestAnimationFrame(loop); }
+function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ st.accMs += dt; if(st.accMs >= st.dropMs){ st.accMs = 0; if(!tryMove(0,1)) lockPiece(); } } } draw(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 /* ====================== INPUT: touch/mouse ====================== */
@@ -241,7 +240,7 @@ let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
 
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa6'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
+if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa7'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
 
 /* ====================== START ====================== */
 startGame();
