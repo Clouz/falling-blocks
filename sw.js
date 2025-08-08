@@ -1,5 +1,5 @@
-// Simple service worker for offline cache
-const CACHE = 'fb-v1';
+// v7 PWA Service Worker
+const CACHE = 'fb-v7pwa';
 const ASSETS = [
   './',
   './index.html',
@@ -9,11 +9,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e)=>{
+  self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', (e)=>{
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(()=> self.clients.claim()));
 });
 
 self.addEventListener('fetch', (e)=>{
@@ -27,7 +28,6 @@ self.addEventListener('fetch', (e)=>{
     }).catch(()=> caches.match('./index.html')))
   );
 });
-
-    }).catch(()=> caches.match('./index.html')))
+x.html')))
   );
 });
