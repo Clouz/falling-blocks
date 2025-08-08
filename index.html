@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8 PWA</title>
+  <title>Falling Blocks – v8.1 PWA</title>
   <style>
     :root{
       --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14;
@@ -49,7 +49,7 @@
       <canvas id="c"></canvas>
       <div id="pause">PAUSA</div>
     </div>
-    <div id="hint">Controlli: trascina orizzontalmente per muovere • Tap = ruota • Swipe ↓ = caduta (hard/soft a scelta)</div>
+    <div id="hint">Mobile: trascina ←/→ per muovere • Tap = ruota • Swipe ↓ = caduta (soft/hard da Opzioni) — PC: ←/→ muovi, ↑ ruota, ↓ soft-drop, Space hard-drop</div>
     <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:480px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] avvio</div>
   </div>
 
@@ -92,7 +92,7 @@
 
 <script>
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v8';
+const SETTINGS_KEY='fb_settings_v81';
 const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark' };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
@@ -196,9 +196,27 @@ function refillNext(){ if(st.bag.length===0) st.bag=newBag(); const t=st.bag.pop
 function startGame(){ st.board=emptyBoard(); st.score=0; st.lines=0; st.level=1; st.dropMs=GRAVITY_BASE_MS; st.accMs=0; st.paused=false; st.over=false; setLevelByLines(); updateHUD(); st.bag=newBag(); st.next=makePiece('I'); spawnFromNext(); refillNext(); }
 
 /* ====================== COLLISIONS / BOARD OPS ====================== */
-function collides(p=st.cur, dx=0, dy=0, r=p.r){ const shape=ROT[p.type][r]; for(let y=0;y<shape.length;y++){ for(let x=0;x<shape[0].length;x++){ if(!shape[y][x]) continue; const nx=p.x+x+dx, ny=p.y+y+dy; if(ny<0) continue; if(nx<0||nx>=COLS||ny>=ROWS) return true; if(st.board[ny][nx]) return true; } } return false; }
+function collides(p=st.cur, dx=0, dy=0, r=p.r){
+  const shape=ROT[p.type][r];
+  for(let y=0;y<shape.length;y++){
+    for(let x=0;x<shape[0].length;x++){
+      if(!shape[y][x]) continue;
+      const nx=p.x+x+dx, ny=p.y+y+dy;
+      if(ny<0) continue;                      // sopra la griglia consentito finché non locka
+      if(nx<0||nx>=COLS||ny>=ROWS) return true;
+      if(st.board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
 function tryMove(dx,dy){ if(!collides(st.cur,dx,dy,st.cur.r)){ st.cur.x+=dx; st.cur.y+=dy; return true;} return false; }
-function tryRotate(){ let nr=(st.cur.r+1)%ROT[st.cur.type].length; if(!collides(st.cur,0,0,nr)) { st.cur.r=nr; return true; } if(!collides(st.cur,-1,0,nr)) { st.cur.x-=1; st.cur.r=nr; return true; } if(!collides(st.cur,1,0,nr)) { st.cur.x+=1; st.cur.r=nr; return true; } return false; }
+function tryRotate(){
+  let nr=(st.cur.r+1)%ROT[st.cur.type].length;
+  if(!collides(st.cur,0,0,nr)) { st.cur.r=nr; return true; }
+  if(!collides(st.cur,-1,0,nr)) { st.cur.x-=1; st.cur.r=nr; return true; }
+  if(!collides(st.cur,1,0,nr)) { st.cur.x+=1; st.cur.r=nr; return true; }
+  return false;
+}
 function hardDrop(){ let d=0; while(!collides(st.cur,0,1,st.cur.r)){ st.cur.y++; d++; } lockPiece(); st.score += 2*d; if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); }
 function softDropStep(){ if(tryMove(0,1)) { st.score += 1; if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); } else { lockPiece(); } }
 
@@ -216,9 +234,23 @@ function lockPiece(){
   if(overflow){ return gameOver(); }
   clearLines();
   spawnFromNext(); refillNext();
-  if(collides(st.cur,0,0,st.cur.r)) gameOver();
+  // niente game over laterale: il collides ai lati impedisce l'uscita
 }
-function clearLines(){ let cleared=0; for(let y=ROWS-1;y>=0;y--){ if(st.board[y].every(v=>v!==0)){ st.board.splice(y,1); st.board.unshift(new Array(COLS).fill(0)); cleared++; y++; } } if(cleared){ st.lines+=cleared; st.score += (SCORE_TABLE[cleared]||0)*st.level; setLevelByLines(); if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); } updateHUD(); } }
+function clearLines(){
+  let cleared=0;
+  for(let y=ROWS-1;y>=0;y--){
+    if(st.board[y].every(v=>v!==0)){
+      st.board.splice(y,1); st.board.unshift(new Array(COLS).fill(0));
+      cleared++; y++;
+    }
+  }
+  if(cleared){
+    st.lines+=cleared; st.score += (SCORE_TABLE[cleared]||0)*st.level;
+    setLevelByLines();
+    if(st.score>st.best){ st.best=st.score; localStorage.setItem('fb_highscore', String(st.best)); }
+    updateHUD();
+  }
+}
 function gameOver(){ st.over=true; st.paused=true; pauseOverlay.textContent = `GAME OVER\nPunti: ${st.score}\nTocca per ricominciare`; pauseOverlay.style.display='flex'; }
 
 /* ====================== DRAW (grid + ghost) ====================== */
@@ -235,60 +267,104 @@ function draw(){
     for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); }
   }
 
+  // board
   for(let y=0;y<ROWS;y++){
     for(let x=0;x<COLS;x++){
       const v=st.board[y][x];
-      if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v]); }
+      if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v], 1); }
     }
   }
 
   if(st.cur){
-    // Ghost piece
+    // Ghost piece: alpha intera controllata in drawCell
     let gy=st.cur.y;
     while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++;
     const s=currentShape();
-    ctx.globalAlpha=0.25;
     for(let y=0;y<s.length;y++){
       for(let x=0;x<s[0].length;x++){
         if(s[y][x]){
           const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL;
-          if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color]);
+          if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color], 0.25);
         }
       }
     }
-    ctx.globalAlpha=1;
-
-    // Current piece
+    // current piece
     for(let y=0;y<s.length;y++){
       for(let x=0;x<s[0].length;x++){
         if(s[y][x]){
           const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL;
-          if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color]);
+          if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color], 1);
         }
       }
     }
   }
 }
-function drawCell(x,y,color){ const r=CELL*0.18; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha=0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha=1; }
-function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
+// drawCell con alpha opzionale coerente
+function drawCell(x,y,color,alpha=1){
+  const r=CELL*0.18;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle=color;
+  roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false);
+  ctx.globalAlpha = alpha * 0.18;
+  ctx.fillStyle="#fff";
+  roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false);
+  ctx.globalAlpha = 1;
+}
+function roundRect(ctx,x,y,w,h,r,fill,stroke){
+  if(w<2*r) r=w/2; if(h<2*r) r=h/2;
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+  if(fill) ctx.fill();
+  if(stroke) ctx.stroke();
+}
 
 /* ====================== LOOP ====================== */
 let lastTs=performance.now();
-function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(!st.paused){ st.accMs+=dt; if(st.accMs>=st.dropMs){ st.accMs=0; if(!tryMove(0,1)) lockPiece(); } } draw(); requestAnimationFrame(loop); }
+function loop(ts){
+  const dt=ts-lastTs; lastTs=ts;
+  if(!st.paused){ st.accMs+=dt; if(st.accMs>=st.dropMs){ st.accMs=0; if(!tryMove(0,1)) lockPiece(); } }
+  draw(); requestAnimationFrame(loop);
+}
 requestAnimationFrame(loop);
 
-/* ====================== INPUT (no long-press pause) ====================== */
+/* ====================== INPUT: touch + mouse ====================== */
 let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false};
 const TAP_MAX_RADIUS=6;
 function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
-function onDown(e){ if(st.over){ startGame(); pauseOverlay.style.display='none'; } const p=getPoint(e); touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false}; e.preventDefault(); }
-function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true;
+function clampX(){
+  const s=currentShape();
+  const maxX = COLS - s[0].length;
+  if (st.cur.x < 0) st.cur.x = 0;
+  if (st.cur.x > maxX) st.cur.x = maxX;
+}
+function onDown(e){
+  if(st.over){ startGame(); pauseOverlay.style.display='none'; }
+  const p=getPoint(e);
+  touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false};
+  e.preventDefault();
+}
+function onMove(e){
+  if(!touch.active) return;
+  const p=getPoint(e);
+  const dx=p.x-touch.x; const dy=p.y-touch.y;
+  touch.x=p.x; touch.y=p.y;
+  if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true;
+
+  // drag orizzontale con step = sensibilità
   touch.accumX += dx;
   while(Math.abs(touch.accumX) >= settings.hstep){
     const step = touch.accumX>0 ? 1 : -1;
     tryMove(step,0);
     touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep);
   }
+  clampX();
+
+  // swipe giù
   if(dy > SWIPE_DOWN_PX){
     touch.swipingDown = true;
     if(settings.dropMode==='soft'){
@@ -309,7 +385,6 @@ function onUp(e){
   if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); }
   e.preventDefault();
 }
-
 canvas.addEventListener('touchstart', onDown, {passive:false});
 canvas.addEventListener('touchmove',  onMove, {passive:false});
 canvas.addEventListener('touchend',   onUp,   {passive:false});
@@ -317,10 +392,22 @@ canvas.addEventListener('mousedown', onDown);
 window.addEventListener('mousemove', onMove);
 window.addEventListener('mouseup', onUp);
 
+/* ====================== INPUT: tastiera (PC) ====================== */
+window.addEventListener('keydown', (e)=>{
+  if(st.paused) return;
+  const k = e.key;
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k)) e.preventDefault();
+  if(k==='ArrowLeft'){ tryMove(-1,0); }
+  else if(k==='ArrowRight'){ tryMove(1,0); }
+  else if(k==='ArrowUp'){ tryRotate(); }
+  else if(k==='ArrowDown'){ softDropStep(); }
+  else if(k===' '){ hardDrop(); }
+});
+
+/* ====================== UI & PWA ====================== */
 btn.addEventListener('click', ()=> togglePause());
 function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSA' : ''; }
 
-/* ====================== PWA (install + SW) ====================== */
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
@@ -329,7 +416,7 @@ if('serviceWorker' in navigator){
   const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
   if(secure){
     const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })();
-    const swPath = basePath + 'sw.js?v=8pwa';
+    const swPath = basePath + 'sw.js?v=8pwa3';
     navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err));
   }
 }
