@@ -34,10 +34,11 @@
       <canvas id="c"></canvas>
       <div id="pause">PAUSA</div>
     </div>
-    <div id="hint">Gesture: • Swipe ←/→ sposta • Tap ruota • Doppio tap hard drop • Swipe ↓ soft drop • Press 400 ms = pausa</div>
+    <div id="hint">Gesture: • Swipe ←/→ sposta • Tap ruota • Doppio tap hard drop • Swipe ↓ soft drop • Press 400 ms = pausa</div>
   </div>
 
 <script>
+console.log('[FB] index loaded');
 // ===== CONFIG ==============================================================
 const COLS=10, ROWS=20;
 const COLORS=["#000000","#00d1ff","#f9c80e","#ff6b6b","#6a4c93","#2ec4b6","#ffd166","#06d6a0"]; // 0 + 7 pezzi
@@ -110,6 +111,7 @@ function updateHUD(){
 function spawnFromNext(){ st.cur = {...st.next}; const shape=currentShape(); st.cur.x = Math.floor((COLS-shape[0].length)/2); st.cur.y=-2; }
 function refillNext(){ if(st.bag.length===0) st.bag=newBag(); const t=st.bag.pop(); st.next = makePiece(t); }
 function startGame(){
+  console.log('[FB] startGame');
   st.board=emptyBoard(); st.score=0; st.lines=0; st.level=1; setLevelByLines(); updateHUD();
   st.paused=false; st.over=false; st.accMs=0;
   refillNext(); spawnFromNext(); refillNext();
@@ -214,11 +216,23 @@ function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.s
 function showPauseOverlay(text){ pauseOverlay.textContent=text; pauseOverlay.style.display='flex'; }
 function restart(){ startGame(); pauseOverlay.style.display='none'; }
 
-// PWA: service worker + install prompt
+// PWA: robust SW registration for subpath repositories
+const basePath = (function(){
+  // ensure sw.js path works on Pages subpaths like /user/repo/
+  const p = location.pathname;
+  return p.endsWith('/') ? p : p.replace(/[^/]*$/, '');
+})();
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ navigator.serviceWorker.register('./sw.js').catch(console.warn); } }
+if('serviceWorker' in navigator){
+  const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  if(secure){
+    const swPath = basePath + 'sw.js?v=3';
+    console.log('[FB] registering SW:', swPath);
+    navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err));
+  }
+}
 
 // start
 startGame();
