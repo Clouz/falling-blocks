@@ -1,10 +1,10 @@
-<!DOCTYPE html><html lang="it" data-theme="dark">
+<!DOCTYPE html><html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.5b PWA</title>
+  <title>Falling Blocks – v8.6 PWA</title>
   <style>
     :root{ --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14; }
     [data-theme="light"]{ --bg:#f7f7fb; --panel:#ffffff; --card:#ffffff; --fg:#0f1020; --acc:#3a86ff; --grid:#00000014; }
@@ -18,7 +18,7 @@
     #game { position:relative }
     canvas { background:var(--panel); border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.2); touch-action:none }
     #hint { opacity:.75; font-size:12px; text-align:center; max-width:520px; line-height:1.3 }
-    #pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); border-radius:16px; font-size:20px; font-weight:800; text-align:center; white-space:pre-line; padding:20px }
+    #pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); border-radius:16px; font-size:20px; font-weight:800; text-align:center; white-space:pre-line; padding:20px; z-index:10 }
     dialog { border:0; border-radius:16px; background:var(--card); color:var(--fg); width:min(92vw, 520px); }
     dialog::backdrop { background:rgba(0,0,0,.45); }
     .row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; }
@@ -27,60 +27,68 @@
     input[type=range] { width: 160px; }
     select, input[type=checkbox] { accent-color: var(--acc); }
     .muted { opacity:.7; font-size:12px; }
+    .nextBox { position:absolute; left: calc(10px + 10*1px); }
   </style>
 </head>
 <body>
   <div id="wrap">
     <div id="hud">
-      <div class="box"><div>Livello</div><div class="big" id="level">1</div></div>
-      <div class="box"><div>Punti</div><div class="big" id="score">0</div></div>
-      <div class="box"><div>Linee</div><div class="big" id="lines">0</div></div>
-      <div class="box"><div>Record</div><div class="big" id="best">0</div></div>
+      <div class="box"><div>Level</div><div class="big" id="level">1</div></div>
+      <div class="box"><div>Score</div><div class="big" id="score">0</div></div>
+      <div class="box"><div>Lines</div><div class="big" id="lines">0</div></div>
+      <div class="box"><div>Best</div><div class="big" id="best">0</div></div>
       <div style="display:flex; gap:8px">
-        <button id="btn" title="Pausa / Riprendi">⏸︎/▶︎</button>
-        <button id="optBtn" title="Opzioni">⚙️ Opzioni</button>
-        <button id="installBtn" style="display:none">⬇︎ Installa</button>
+        <button id="btn" title="Pause / Resume">⏸︎/▶︎</button>
+        <button id="optBtn" title="Options">⚙️ Options</button>
+        <button id="installBtn" style="display:none">⬇︎ Install</button>
       </div>
     </div>
     <div id="game" style="position:relative">
       <canvas id="c"></canvas>
-      <div id="pause">PAUSA</div>
+      <div id="pause">PAUSED</div>
       <div class="pill" id="comboPill" style="position:absolute; right:8px; top:8px; z-index:5; pointer-events:none; display:none">Combo x1</div>
     </div>
-    <div id="hint">Mobile: trascina ←/→ per muovere • Tap = ruota • Swipe ↓ = caduta (soft/hard da Opzioni). PC: ←/→ muovi, ↑ ruota, ↓ soft-drop, Space hard-drop</div>
-    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:520px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] avvio</div>
+    <div id="hint">Mobile: drag ←/→ to move • Tap = rotate • Swipe ↓ = drop (soft/hard in Options). Desktop: ←/→ move, ↑ rotate, ↓ soft-drop, Space hard-drop</div>
+    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:520px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] boot</div>
   </div>  <dialog id="optModal">
     <form method="dialog" style="padding:16px">
-      <h3 style="margin-top:0">Opzioni <span class="muted" id="ver"></span></h3>
+      <h3 style="margin-top:0">Options <span class="muted" id="ver"></span></h3>
       <div class="row">
-        <label for="sens">Sensibilità movimento</label>
+        <label for="sens">Move sensitivity</label>
         <div><input id="sens" type="range" min="8" max="36" step="2"><span id="sensVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
-        <label for="dropMode">Caduta swipe ↓</label>
+        <label for="dropMode">Swipe ↓ action</label>
         <select id="dropMode">
           <option value="hard">Hard drop</option>
           <option value="soft">Soft drop</option>
         </select>
       </div>
       <div class="row">
-        <label for="softFactor">Soft drop – fattore</label>
-        <div><input id="softFactor" type="range" min="0.2" max="1.0" step="0.05"><span id="softFactorVal" style="margin-left:10px"></span></div>
+        <label for="softFactor">Soft-drop speed (factor)</label>
+        <div><input id="softFactor" type="range" min="0.05" max="1.0" step="0.05"><span id="softFactorVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
-        <label for="softMin">Soft drop – minimo (ms)</label>
-        <div><input id="softMin" type="range" min="80" max="400" step="10"><span id="softMinVal" style="margin-left:10px"></span></div>
+        <label for="softMin">Soft-drop min (ms)</label>
+        <div><input id="softMin" type="range" min="30" max="300" step="10"><span id="softMinVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
-        <label for="gridToggle">Griglia</label>
+        <label for="randSel">Piece randomizer</label>
+        <select id="randSel">
+          <option value="bag">Balanced (7-bag)</option>
+          <option value="nes">NES-like (pure random)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="gridToggle">Grid</label>
         <input id="gridToggle" type="checkbox">
       </div>
       <div class="row">
-        <label for="themeSel">Tema</label>
+        <label for="themeSel">Theme</label>
         <select id="themeSel">
-          <option value="dark">Scuro</option>
-          <option value="light">Chiaro</option>
-          <option value="system">Sistema</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="system">System</option>
         </select>
       </div>
       <div class="row">
@@ -88,39 +96,40 @@
         <select id="startLevelSel"></select>
       </div>
       <div class="row">
-        <label for="dbgToggle">Schermata debug</label>
+        <label for="dbgToggle">Debug overlay</label>
         <input id="dbgToggle" type="checkbox">
       </div>
       <div class="row">
         <label for="lockStyle">Lock delay</label>
         <select id="lockStyle">
-          <option value="nes">NES (illimitato)</option>
-          <option value="modern">Moderno (limite reset)</option>
+          <option value="nes">NES (infinite)</option>
+          <option value="modern">Modern (limited resets)</option>
         </select>
       </div>
       <div class="row">
-        <label for="lockDelay">Durata lock (ms)</label>
+        <label for="lockDelay">Lock duration (ms)</label>
         <div><input id="lockDelay" type="range" min="100" max="1000" step="50"><span id="lockDelayVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row" id="lockMaxRow">
-        <label for="lockMaxResets">Max reset (moderno)</label>
+        <label for="lockMaxResets">Max resets (modern)</label>
         <div><input id="lockMaxResets" type="range" min="1" max="30" step="1"><span id="lockMaxVal" style="margin-left:10px"></span></div>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px">
-        <button value="cancel" formnovalidate>Annulla</button>
-        <button id="saveBtn" value="default">Salva</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button id="saveBtn" value="default">Save</button>
       </div>
     </form>
   </dialog><script>
-/* ====================== VERSIONE ====================== */
-const VERSION = 'v8.5b';
+/* ====================== VERSION ====================== */
+const VERSION = 'v8.6';
 
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v85b';
+const SETTINGS_KEY='fb_settings_v86';
 const DefaultSettings = {
   hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0,
   lockDelay:500, lockStyle:'nes', lockMaxResets:15,
-  softFactor:0.6, softMin:140
+  softFactor:0.25, softMin:80,
+  randomizer:'bag'
 };
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
@@ -142,7 +151,7 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 const COLS=10, ROWS=20;
 const COLORS=["#000000","#00d1ff","#f9c80e","#ff6b6b","#6a4c93","#2ec4b6","#ffd166","#06d6a0"];
 const SCORE_TABLE={1:100,2:300,3:500,4:800};
-const CLEAR_ANIM_MS = 120; // flash rapido sull'intera riga
+const CLEAR_ANIM_MS = 120; // row flash
 const SWIPE_DOWN_PX=40; const TAP_MAX_MOVE=10, TAP_MAX_MS=250; const TAP_MAX_RADIUS=6;
 
 const canvas=document.getElementById('c');
@@ -167,6 +176,7 @@ const softFactorInput=document.getElementById('softFactor');
 const softFactorVal=document.getElementById('softFactorVal');
 const softMinInput=document.getElementById('softMin');
 const softMinVal=document.getElementById('softMinVal');
+const randSel=document.getElementById('randSel');
 const installBtn=document.getElementById('installBtn');
 const comboPill=document.getElementById('comboPill');
 
@@ -183,8 +193,9 @@ function refreshOptionsUI(){
   lockDelayInput.value = String(settings.lockDelay); lockDelayVal.textContent = settings.lockDelay+' ms';
   lockMaxResetsInput.value = String(settings.lockMaxResets); lockMaxVal.textContent = settings.lockMaxResets;
   document.getElementById('lockMaxRow').style.display = (settings.lockStyle==='modern') ? 'flex' : 'none';
-  softFactorInput.value = String(settings.softFactor); softFactorVal.textContent = settings.softFactor.toFixed(2);
+  softFactorInput.value = String(settings.softFactor); softFactorVal.textContent = parseFloat(settings.softFactor).toFixed(2);
   softMinInput.value = String(settings.softMin); softMinVal.textContent = settings.softMin+' ms';
+  randSel.value = settings.randomizer;
   dbgEl.style.display = settings.debug ? 'block' : 'none';
 }
 refreshOptionsUI();
@@ -198,6 +209,7 @@ document.getElementById('saveBtn').addEventListener('click', (e)=>{
   settings.debug=!!dbgToggle.checked; settings.startLevel=parseInt(startLevelSel.value,10);
   settings.lockStyle = lockStyleSel.value; settings.lockDelay = parseInt(lockDelayInput.value,10); settings.lockMaxResets = parseInt(lockMaxResetsInput.value,10);
   settings.softFactor = parseFloat(softFactorInput.value); settings.softMin = parseInt(softMinInput.value,10);
+  settings.randomizer = randSel.value;
   saveSettings(); applyTheme(); refreshOptionsUI(); optModal.close();
   if(st.paused||st.over) { startGame(); pauseOverlay.style.display='none'; }
 });
@@ -206,6 +218,7 @@ lockDelayInput.addEventListener('input', ()=>{ lockDelayVal.textContent = lockDe
 lockMaxResetsInput.addEventListener('input', ()=>{ lockMaxVal.textContent = lockMaxResetsInput.value; });
 softFactorInput.addEventListener('input', ()=>{ softFactorVal.textContent = parseFloat(softFactorInput.value).toFixed(2); });
 softMinInput.addEventListener('input', ()=>{ softMinVal.textContent = softMinInput.value+' ms'; });
+randSel.addEventListener('change', ()=>{ /* apply on next spawn */ });
 
 /* ====================== LAYOUT ====================== */
 let CELL=28, SIDE_W=0, TOTAL_W=0, TOTAL_H=0;
@@ -216,24 +229,31 @@ window.addEventListener('resize', resizeCanvas); resizeCanvas();
 const ROT = { O:[[[1,1],[1,1]]], I:[[[1,1,1,1]], [[1],[1],[1],[1]]], S:[[[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]]], Z:[[[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]]], L:[[[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]]], J:[[[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]]], T:[[[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]], [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]]], };
 const PIECES=['I','O','T','S','Z','J','L'];
 function newBag(){ const b=PIECES.slice(); for(let i=b.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [b[i],b[j]]=[b[j],b[i]]; } return b; }
+function randNES(){ const i=(Math.random()*PIECES.length)|0; return PIECES[i]; }
 function makePiece(type){ const r=0; const s=ROT[type][r]; const color=PIECES.indexOf(type)+1; const x=((COLS-s[0].length)/2)|0; const y=-2; return {type,r,x,y,color}; }
 
 /* ====================== STATE ====================== */
 function emptyBoard(){ const b=[]; for(let y=0;y<ROWS;y++){ const row=new Array(COLS); for(let x=0;x<COLS;x++) row[x]=0; b.push(row);} return b; }
 let st={ board:emptyBoard(), cur:null, next:makePiece('I'), bag:newBag(), score:0, lines:0, level:1, best:Number(localStorage.getItem('fb_highscore')||0), dropMs:800, accMs:0, paused:false, over:false, startLevel:settings.startLevel, combo:0, b2b:false, clearAnim:null, grounded:false, lockT:0, lockResets:0, softDropping:false };
 
-// opzionale: override da URL ?start=...
+// optional: override by URL ?start=...
 (function(){ const m = new URLSearchParams(location.search).get('start'); const n = m!=null ? Math.max(0, Math.min(19, parseInt(m,10)||0)) : null; if(n!=null){ st.startLevel = n; settings.startLevel = n; saveSettings(); } })();
 
 function updateHUD(){ document.getElementById('score').textContent = st.score; document.getElementById('lines').textContent = st.lines; document.getElementById('best').textContent = st.best; document.getElementById('level').textContent = st.level; comboPill.style.display = st.combo>1 ? 'inline-flex' : 'none'; comboPill.textContent = 'Combo x'+st.combo; }
 
 /* ====================== NES SPEED & LEVEL ====================== */
 function nesDropMsForLevel(level){ let frames; if (level <= 9) { const table = [48,43,38,33,28,23,18,13,8,6]; frames = table[level]; } else if (level <= 12) frames = 5; else if (level <= 15) frames = 4; else if (level <= 18) frames = 3; else if (level <= 28) frames = 2; else frames = 1; const ms = Math.round(frames * 1000 / 60); return Math.max(60, ms); }
-function setLevelByLines(){ const L0 = st.startLevel; const firstGoal = Math.min(L0*10 + 10, Math.max(100, L0*10 - 50)); let newLevel; if (st.lines < firstGoal) newLevel = L0; else newLevel = L0 + 1 + Math.floor((st.lines - firstGoal)/10); const prev = st.level; st.level = Math.max(L0, newLevel); const newMs = nesDropMsForLevel(st.level); if(st.dropMs !== newMs){ st.dropMs=newMs; st.accMs=0; } }
+function setLevelByLines(){ const L0 = st.startLevel; const firstGoal = Math.min(L0*10 + 10, Math.max(100, L0*10 - 50)); let newLevel; if (st.lines < firstGoal) newLevel = L0; else newLevel = L0 + 1 + Math.floor((st.lines - firstGoal)/10); st.level = Math.max(L0, newLevel); const newMs = nesDropMsForLevel(st.level); if(st.dropMs !== newMs){ st.dropMs=newMs; st.accMs=0; } }
 
 function currentShape(){ return ROT[st.cur.type][st.cur.r]; }
 function spawnFromNext(){ st.cur = Object.assign({}, st.next); const s=currentShape(); st.cur.x=((COLS-s[0].length)/2)|0; st.cur.y=-2; }
-function refillNext(){ if(st.bag.length===0) st.bag=newBag(); const t=st.bag.pop(); st.next = makePiece(t); }
+function refillNext(){
+  if(settings.randomizer==='bag'){
+    if(st.bag.length===0) st.bag=newBag(); const t=st.bag.pop(); st.next = makePiece(t);
+  } else {
+    st.next = makePiece(randNES());
+  }
+}
 function startGame(){ st.board=emptyBoard(); st.score=0; st.lines=0; st.level=st.startLevel=settings.startLevel; st.dropMs=nesDropMsForLevel(st.level); st.accMs=0; st.paused=false; st.over=false; st.combo=0; st.b2b=false; st.clearAnim=null; st.grounded=false; st.lockT=0; st.lockResets=0; st.softDropping=false; updateHUD(); st.bag=newBag(); st.next=makePiece('I'); spawnFromNext(); refillNext(); }
 
 /* ====================== COLLISIONS & MOVES ====================== */
@@ -255,10 +275,24 @@ function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<
 
 /* ====================== DRAW ====================== */
 function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#14141b'; ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4);
+  // side panel box for NEXT
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#1a1a22';
+  const sideX = offX + COLS*CELL + CELL*0.5;
+  const sideY = offY;
+  const sideW = CELL*4.5;
+  const sideH = CELL*5.5;
+  roundRect(ctx, sideX, sideY, sideW, sideH, 12, true, false);
+  ctx.font = 'bold '+Math.floor(CELL*0.7)+'px system-ui';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#e9e9ef';
+  ctx.fillText('NEXT', sideX + CELL*0.4, sideY + CELL*1.2);
+
   if(settings.grid){ ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#ffffff14'; ctx.lineWidth=1; for(let x=0;x<=COLS;x++){ ctx.beginPath(); ctx.moveTo(offX+x*CELL, offY); ctx.lineTo(offX+x*CELL, offY+ROWS*CELL); ctx.stroke(); } for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); } }
   for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const v=st.board[y][x]; if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v], 1); } } }
+  // ghost + current
   if(st.cur){ let gy=st.cur.y; while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++; const s=currentShape(); for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL; if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color], 0.25); } } } for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL; if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color], 1); } } } }
-  // Flash intero sulle righe che stanno per sparire
+  // draw NEXT preview
+  if(st.next){ const s=ROT[st.next.type][0]; const nrows=s.length, ncols=s[0].length; const cell=Math.floor(CELL*0.8); const ox = sideX + (sideW - ncols*cell)/2; const oy = sideY + CELL*1.8; for(let y=0;y<nrows;y++){ for(let x=0;x<ncols;x++){ if(s[y][x]){ drawCell(ox + x*cell, oy + y*cell, COLORS[st.next.color], 1); } } } }
+  // row flash
   if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const alpha = 0.5 * (1 - p); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff'; for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.fillRect(offX, rowY, COLS*CELL, CELL); } ctx.globalAlpha = 1; }
 }
 function drawCell(x,y,color,alpha=1){ const r=CELL*0.18; ctx.globalAlpha = alpha; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha = alpha * 0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha = 1; }
@@ -268,63 +302,50 @@ function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2;
 let lastTs=performance.now();
 function beginGrounding(){ if(!st.grounded){ st.grounded=true; st.lockT=0; st.lockResets=0; } }
 function onGroundNudge(){
-  // Se dopo lo spostamento non siamo più a contatto, annulla il grounded
   if(!collides(st.cur,0,1,st.cur.r)){
     st.grounded=false; st.lockT=0; return;
   }
-  // Ancora a contatto: reset timer e (se moderno) conteggio reset
   st.lockT=0;
   if(settings.lockStyle==='modern'){
     st.lockResets++;
     if(st.lockResets>=settings.lockMaxResets){ lockPiece(); }
   }
 }
-function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ // gravità (con soft drop)
-      const effMs = st.softDropping ? Math.max(settings.softMin, st.dropMs * settings.softFactor) : st.dropMs;
-      st.accMs += dt;
-      if(st.accMs >= effMs){ st.accMs = 0; if(!tryMove(0,1)){ beginGrounding(); } else { st.grounded=false; st.lockT=0; } }
-      // lock delay con ricontrollo contatto
-      if(st.grounded){
-        if(!collides(st.cur,0,1,st.cur.r)){
-          st.grounded=false; st.lockT=0;
-        } else {
-          st.lockT += dt;
-          if(st.lockT >= settings.lockDelay){ lockPiece(); }
-        }
-      }
-    } }
-  draw(); requestAnimationFrame(loop); }
+function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ const effMs = st.softDropping ? Math.max(settings.softMin, st.dropMs * settings.softFactor) : st.dropMs; st.accMs += dt; if(st.accMs >= effMs){ st.accMs = 0; if(!tryMove(0,1)){ beginGrounding(); } else { st.grounded=false; st.lockT=0; } } if(st.grounded){ if(!collides(st.cur,0,1,st.cur.r)){ st.grounded=false; st.lockT=0; } else { st.lockT += dt; if(st.lockT >= settings.lockDelay){ lockPiece(); } } } } } draw(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 /* ====================== INPUT: touch/mouse ====================== */
 let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false, gesture:null};
 function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
 function clampX(){ const s=currentShape(); const maxX = COLS - s[0].length; if (st.cur.x < 0) st.cur.x = 0; if (st.cur.x > maxX) st.cur.x = maxX; }
-function onDown(e){ if(st.over){ startGame(); pauseOverlay.style.display='none'; } const p=getPoint(e); touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false, gesture:null}; e.preventDefault(); }
+function onDown(e){ const p=getPoint(e); if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); return; } touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false, gesture:null}; e.preventDefault(); }
 function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true; const totalDx=Math.abs(p.x-touch.x0), totalDy=Math.abs(p.y-touch.y0); if(!touch.gesture){ if(totalDy > SWIPE_DOWN_PX && totalDy > totalDx * 1.2){ touch.gesture='swipeDown'; touch.swipingDown=true; } else if(totalDx > settings.hstep && totalDx > totalDy){ touch.gesture='dragX'; } }
   const allowHorizontal = !(touch.gesture==='swipeDown' && settings.dropMode==='hard');
   if(allowHorizontal){ touch.accumX += dx; while(Math.abs(touch.accumX) >= settings.hstep){ const step = touch.accumX>0 ? 1 : -1; tryMove(step,0); touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep); } clampX(); }
   if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){
-    st.softDropping = true; // gestito nel loop con effMs
+    st.softDropping = true; // handled in loop
   }
   e.preventDefault(); }
 function onUp(e){ if(!touch.active) return; touch.active=false; if(st.over) return; if(touch.gesture==='swipeDown'){ if(settings.dropMode==='hard'){ hardDrop(); } else { st.softDropping=false; } return; } const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0); const duration=performance.now()-touch.t0; if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); } e.preventDefault(); }
 canvas.addEventListener('touchstart', onDown, {passive:false}); canvas.addEventListener('touchmove',  onMove, {passive:false}); canvas.addEventListener('touchend',   onUp,   {passive:false}); canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+// Allow tapping the overlay to restart when GAME OVER (but not to toggle pause)
+pauseOverlay.addEventListener('touchstart', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } }, {passive:false});
+pauseOverlay.addEventListener('mousedown', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } });
 
-/* ====================== INPUT: tastiera (PC) ====================== */
+/* ====================== INPUT: keyboard (desktop) ====================== */
 window.addEventListener('keydown', (e)=>{ if(st.paused) return; const k = e.key; if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k)) e.preventDefault(); if(k==='ArrowLeft'){ tryMove(-1,0); } else if(k==='ArrowRight'){ tryMove(1,0); } else if(k==='ArrowUp'){ tryRotate(); } else if(k==='ArrowDown'){ if(!st.softDropping) softDropStep(); st.softDropping = true; } else if(k===' '){ hardDrop(); } });
 window.addEventListener('keyup', (e)=>{ if(e.key==='ArrowDown'){ st.softDropping = false; } });
 
 /* ====================== UI & PWA ====================== */
 btn.addEventListener('click', ()=> togglePause());
-function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSA' : ''; }
-function gameOver(){ st.over=true; st.paused=true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='GAME OVER\nTocca per ricominciare'; }
+function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSED' : ''; }
+function gameOver(){ st.over=true; st.paused=true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='GAME OVER\nTap to restart'; }
 
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
 
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa8b'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
+if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa9'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
 
 /* ====================== START ====================== */
 startGame();
