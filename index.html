@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.5 PWA</title>
+  <title>Falling Blocks – v8.5b PWA</title>
   <style>
     :root{ --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14; }
     [data-theme="light"]{ --bg:#f7f7fb; --panel:#ffffff; --card:#ffffff; --fg:#0f1020; --acc:#3a86ff; --grid:#00000014; }
@@ -26,6 +26,7 @@
     label { font-weight:600; }
     input[type=range] { width: 160px; }
     select, input[type=checkbox] { accent-color: var(--acc); }
+    .muted { opacity:.7; font-size:12px; }
   </style>
 </head>
 <body>
@@ -50,7 +51,7 @@
     <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:520px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] avvio</div>
   </div>  <dialog id="optModal">
     <form method="dialog" style="padding:16px">
-      <h3 style="margin-top:0">Opzioni</h3>
+      <h3 style="margin-top:0">Opzioni <span class="muted" id="ver"></span></h3>
       <div class="row">
         <label for="sens">Sensibilità movimento</label>
         <div><input id="sens" type="range" min="8" max="36" step="2"><span id="sensVal" style="margin-left:10px"></span></div>
@@ -61,6 +62,14 @@
           <option value="hard">Hard drop</option>
           <option value="soft">Soft drop</option>
         </select>
+      </div>
+      <div class="row">
+        <label for="softFactor">Soft drop – fattore</label>
+        <div><input id="softFactor" type="range" min="0.2" max="1.0" step="0.05"><span id="softFactorVal" style="margin-left:10px"></span></div>
+      </div>
+      <div class="row">
+        <label for="softMin">Soft drop – minimo (ms)</label>
+        <div><input id="softMin" type="range" min="80" max="400" step="10"><span id="softMinVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
         <label for="gridToggle">Griglia</label>
@@ -103,9 +112,16 @@
       </div>
     </form>
   </dialog><script>
+/* ====================== VERSIONE ====================== */
+const VERSION = 'v8.5b';
+
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v85';
-const DefaultSettings = { hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0, lockDelay:500, lockStyle:'nes', lockMaxResets:15 };
+const SETTINGS_KEY='fb_settings_v85b';
+const DefaultSettings = {
+  hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0,
+  lockDelay:500, lockStyle:'nes', lockMaxResets:15,
+  softFactor:0.6, softMin:140
+};
 let settings = loadSettings();
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); return Object.assign({}, DefaultSettings, s); }catch(_){ return {...DefaultSettings}; } }
 function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
@@ -128,9 +144,6 @@ const COLORS=["#000000","#00d1ff","#f9c80e","#ff6b6b","#6a4c93","#2ec4b6","#ffd1
 const SCORE_TABLE={1:100,2:300,3:500,4:800};
 const CLEAR_ANIM_MS = 120; // flash rapido sull'intera riga
 const SWIPE_DOWN_PX=40; const TAP_MAX_MOVE=10, TAP_MAX_MS=250; const TAP_MAX_RADIUS=6;
-// Soft drop tuning
-const SOFT_DROP_FACTOR = 0.6;   // il soft drop usa il 60% della gravità attuale (più lento dell'hard/gravità massima)
-const SOFT_DROP_MIN_MS = 140;   // non scendere mai sotto questo valore per soft drop
 
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -150,8 +163,14 @@ const lockDelayInput=document.getElementById('lockDelay');
 const lockDelayVal=document.getElementById('lockDelayVal');
 const lockMaxResetsInput=document.getElementById('lockMaxResets');
 const lockMaxVal=document.getElementById('lockMaxVal');
+const softFactorInput=document.getElementById('softFactor');
+const softFactorVal=document.getElementById('softFactorVal');
+const softMinInput=document.getElementById('softMin');
+const softMinVal=document.getElementById('softMinVal');
 const installBtn=document.getElementById('installBtn');
 const comboPill=document.getElementById('comboPill');
+
+document.getElementById('ver').textContent = VERSION;
 
 // populate start level 0..19
 for(let i=0;i<=19;i++){ const o=document.createElement('option'); o.value=String(i); o.textContent=String(i); startLevelSel.appendChild(o);} 
@@ -164,6 +183,8 @@ function refreshOptionsUI(){
   lockDelayInput.value = String(settings.lockDelay); lockDelayVal.textContent = settings.lockDelay+' ms';
   lockMaxResetsInput.value = String(settings.lockMaxResets); lockMaxVal.textContent = settings.lockMaxResets;
   document.getElementById('lockMaxRow').style.display = (settings.lockStyle==='modern') ? 'flex' : 'none';
+  softFactorInput.value = String(settings.softFactor); softFactorVal.textContent = settings.softFactor.toFixed(2);
+  softMinInput.value = String(settings.softMin); softMinVal.textContent = settings.softMin+' ms';
   dbgEl.style.display = settings.debug ? 'block' : 'none';
 }
 refreshOptionsUI();
@@ -175,15 +196,16 @@ document.getElementById('saveBtn').addEventListener('click', (e)=>{
   settings.hstep=parseInt(sensInput.value,10);
   settings.dropMode=dropSelect.value; settings.grid=!!gridToggle.checked; settings.theme=themeSel.value;
   settings.debug=!!dbgToggle.checked; settings.startLevel=parseInt(startLevelSel.value,10);
-  settings.lockStyle = lockStyleSel.value;
-  settings.lockDelay = parseInt(lockDelayInput.value,10);
-  settings.lockMaxResets = parseInt(lockMaxResetsInput.value,10);
+  settings.lockStyle = lockStyleSel.value; settings.lockDelay = parseInt(lockDelayInput.value,10); settings.lockMaxResets = parseInt(lockMaxResetsInput.value,10);
+  settings.softFactor = parseFloat(softFactorInput.value); settings.softMin = parseInt(softMinInput.value,10);
   saveSettings(); applyTheme(); refreshOptionsUI(); optModal.close();
   if(st.paused||st.over) { startGame(); pauseOverlay.style.display='none'; }
 });
 lockStyleSel.addEventListener('change', ()=>{ settings.lockStyle = lockStyleSel.value; refreshOptionsUI(); });
 lockDelayInput.addEventListener('input', ()=>{ lockDelayVal.textContent = lockDelayInput.value+' ms'; });
 lockMaxResetsInput.addEventListener('input', ()=>{ lockMaxVal.textContent = lockMaxResetsInput.value; });
+softFactorInput.addEventListener('input', ()=>{ softFactorVal.textContent = parseFloat(softFactorInput.value).toFixed(2); });
+softMinInput.addEventListener('input', ()=>{ softMinVal.textContent = softMinInput.value+' ms'; });
 
 /* ====================== LAYOUT ====================== */
 let CELL=28, SIDE_W=0, TOTAL_W=0, TOTAL_H=0;
@@ -240,4 +262,72 @@ function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canv
   if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const alpha = 0.5 * (1 - p); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff'; for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.fillRect(offX, rowY, COLS*CELL, CELL); } ctx.globalAlpha = 1; }
 }
 function drawCell(x,y,color,alpha=1){ const r=CELL*0.18; ctx.globalAlpha = alpha; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha = alpha * 0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha = 1; }
-function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+
+function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
+
+/* ====================== LOOP ====================== */
+let lastTs=performance.now();
+function beginGrounding(){ if(!st.grounded){ st.grounded=true; st.lockT=0; st.lockResets=0; } }
+function onGroundNudge(){
+  // Se dopo lo spostamento non siamo più a contatto, annulla il grounded
+  if(!collides(st.cur,0,1,st.cur.r)){
+    st.grounded=false; st.lockT=0; return;
+  }
+  // Ancora a contatto: reset timer e (se moderno) conteggio reset
+  st.lockT=0;
+  if(settings.lockStyle==='modern'){
+    st.lockResets++;
+    if(st.lockResets>=settings.lockMaxResets){ lockPiece(); }
+  }
+}
+function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ // gravità (con soft drop)
+      const effMs = st.softDropping ? Math.max(settings.softMin, st.dropMs * settings.softFactor) : st.dropMs;
+      st.accMs += dt;
+      if(st.accMs >= effMs){ st.accMs = 0; if(!tryMove(0,1)){ beginGrounding(); } else { st.grounded=false; st.lockT=0; } }
+      // lock delay con ricontrollo contatto
+      if(st.grounded){
+        if(!collides(st.cur,0,1,st.cur.r)){
+          st.grounded=false; st.lockT=0;
+        } else {
+          st.lockT += dt;
+          if(st.lockT >= settings.lockDelay){ lockPiece(); }
+        }
+      }
+    } }
+  draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+/* ====================== INPUT: touch/mouse ====================== */
+let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false, gesture:null};
+function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
+function clampX(){ const s=currentShape(); const maxX = COLS - s[0].length; if (st.cur.x < 0) st.cur.x = 0; if (st.cur.x > maxX) st.cur.x = maxX; }
+function onDown(e){ if(st.over){ startGame(); pauseOverlay.style.display='none'; } const p=getPoint(e); touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false, gesture:null}; e.preventDefault(); }
+function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true; const totalDx=Math.abs(p.x-touch.x0), totalDy=Math.abs(p.y-touch.y0); if(!touch.gesture){ if(totalDy > SWIPE_DOWN_PX && totalDy > totalDx * 1.2){ touch.gesture='swipeDown'; touch.swipingDown=true; } else if(totalDx > settings.hstep && totalDx > totalDy){ touch.gesture='dragX'; } }
+  const allowHorizontal = !(touch.gesture==='swipeDown' && settings.dropMode==='hard');
+  if(allowHorizontal){ touch.accumX += dx; while(Math.abs(touch.accumX) >= settings.hstep){ const step = touch.accumX>0 ? 1 : -1; tryMove(step,0); touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep); } clampX(); }
+  if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){
+    st.softDropping = true; // gestito nel loop con effMs
+  }
+  e.preventDefault(); }
+function onUp(e){ if(!touch.active) return; touch.active=false; if(st.over) return; if(touch.gesture==='swipeDown'){ if(settings.dropMode==='hard'){ hardDrop(); } else { st.softDropping=false; } return; } const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0); const duration=performance.now()-touch.t0; if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); } e.preventDefault(); }
+canvas.addEventListener('touchstart', onDown, {passive:false}); canvas.addEventListener('touchmove',  onMove, {passive:false}); canvas.addEventListener('touchend',   onUp,   {passive:false}); canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+
+/* ====================== INPUT: tastiera (PC) ====================== */
+window.addEventListener('keydown', (e)=>{ if(st.paused) return; const k = e.key; if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k)) e.preventDefault(); if(k==='ArrowLeft'){ tryMove(-1,0); } else if(k==='ArrowRight'){ tryMove(1,0); } else if(k==='ArrowUp'){ tryRotate(); } else if(k==='ArrowDown'){ if(!st.softDropping) softDropStep(); st.softDropping = true; } else if(k===' '){ hardDrop(); } });
+window.addEventListener('keyup', (e)=>{ if(e.key==='ArrowDown'){ st.softDropping = false; } });
+
+/* ====================== UI & PWA ====================== */
+btn.addEventListener('click', ()=> togglePause());
+function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSA' : ''; }
+function gameOver(){ st.over=true; st.paused=true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='GAME OVER\nTocca per ricominciare'; }
+
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
+installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
+
+if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa8b'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
+
+/* ====================== START ====================== */
+startGame();
+dbg('boot ok ' + VERSION);
+</script></body>
+</html>
