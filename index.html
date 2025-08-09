@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.6 PWA</title>
+  <title>Falling Blocks – v8.6a PWA<\/title>
   <style>
     :root{ --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14; }
     [data-theme="light"]{ --bg:#f7f7fb; --panel:#ffffff; --card:#ffffff; --fg:#0f1020; --acc:#3a86ff; --grid:#00000014; }
@@ -200,7 +200,12 @@ function refreshOptionsUI(){
 }
 refreshOptionsUI();
 
-optBtn.addEventListener('click', ()=>{ refreshOptionsUI(); optModal.showModal(); });
+optBtn.addEventListener('click', ()=>{ 
+  refreshOptionsUI(); 
+  // Auto-pause when opening Options
+  if(!st.over){ st.paused = true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='PAUSED'; }
+  optModal.showModal(); 
+});
 
 document.getElementById('saveBtn').addEventListener('click', (e)=>{
   e.preventDefault();
@@ -274,81 +279,4 @@ function commitClearRows(rows){ if (!rows || !rows.length) { st.combo = 0; spawn
 function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const by=st.cur.y+y; if(by<0){ overflow=true; } else { st.board[by][st.cur.x+x]=st.cur.color; } } } } st.grounded=false; st.lockT=0; st.lockResets=0; if(overflow){ return gameOver(); } const rows = getFullRows(); if(rows.length){ startClearAnim(rows); } else { st.combo = 0; spawnFromNext(); refillNext(); } }
 
 /* ====================== DRAW ====================== */
-function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#14141b'; ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4);
-  // side panel box for NEXT
-  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#1a1a22';
-  const sideX = offX + COLS*CELL + CELL*0.5;
-  const sideY = offY;
-  const sideW = CELL*4.5;
-  const sideH = CELL*5.5;
-  roundRect(ctx, sideX, sideY, sideW, sideH, 12, true, false);
-  ctx.font = 'bold '+Math.floor(CELL*0.7)+'px system-ui';
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#e9e9ef';
-  ctx.fillText('NEXT', sideX + CELL*0.4, sideY + CELL*1.2);
-
-  if(settings.grid){ ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#ffffff14'; ctx.lineWidth=1; for(let x=0;x<=COLS;x++){ ctx.beginPath(); ctx.moveTo(offX+x*CELL, offY); ctx.lineTo(offX+x*CELL, offY+ROWS*CELL); ctx.stroke(); } for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); } }
-  for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const v=st.board[y][x]; if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v], 1); } } }
-  // ghost + current
-  if(st.cur){ let gy=st.cur.y; while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++; const s=currentShape(); for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL; if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color], 0.25); } } } for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL; if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color], 1); } } } }
-  // draw NEXT preview
-  if(st.next){ const s=ROT[st.next.type][0]; const nrows=s.length, ncols=s[0].length; const cell=Math.floor(CELL*0.8); const ox = sideX + (sideW - ncols*cell)/2; const oy = sideY + CELL*1.8; for(let y=0;y<nrows;y++){ for(let x=0;x<ncols;x++){ if(s[y][x]){ drawCell(ox + x*cell, oy + y*cell, COLORS[st.next.color], 1); } } } }
-  // row flash
-  if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const alpha = 0.5 * (1 - p); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff'; for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.fillRect(offX, rowY, COLS*CELL, CELL); } ctx.globalAlpha = 1; }
-}
-function drawCell(x,y,color,alpha=1){ const r=CELL*0.18; ctx.globalAlpha = alpha; ctx.fillStyle=color; roundRect(ctx,x+1,y+1,CELL-2,CELL-2,r,true,false); ctx.globalAlpha = alpha * 0.18; ctx.fillStyle="#fff"; roundRect(ctx,x+3,y+3,CELL-6,CELL-6,r,true,false); ctx.globalAlpha = 1; }
-function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
-
-/* ====================== LOOP ====================== */
-let lastTs=performance.now();
-function beginGrounding(){ if(!st.grounded){ st.grounded=true; st.lockT=0; st.lockResets=0; } }
-function onGroundNudge(){
-  if(!collides(st.cur,0,1,st.cur.r)){
-    st.grounded=false; st.lockT=0; return;
-  }
-  st.lockT=0;
-  if(settings.lockStyle==='modern'){
-    st.lockResets++;
-    if(st.lockResets>=settings.lockMaxResets){ lockPiece(); }
-  }
-}
-function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ const effMs = st.softDropping ? Math.max(settings.softMin, st.dropMs * settings.softFactor) : st.dropMs; st.accMs += dt; if(st.accMs >= effMs){ st.accMs = 0; if(!tryMove(0,1)){ beginGrounding(); } else { st.grounded=false; st.lockT=0; } } if(st.grounded){ if(!collides(st.cur,0,1,st.cur.r)){ st.grounded=false; st.lockT=0; } else { st.lockT += dt; if(st.lockT >= settings.lockDelay){ lockPiece(); } } } } } draw(); requestAnimationFrame(loop); }
-requestAnimationFrame(loop);
-
-/* ====================== INPUT: touch/mouse ====================== */
-let touch={active:false, x0:0,y0:0, x:0,y:0, moved:false, t0:0, accumX:0, swipingDown:false, gesture:null};
-function getPoint(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; if(e.changedTouches&&e.changedTouches[0]) return {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
-function clampX(){ const s=currentShape(); const maxX = COLS - s[0].length; if (st.cur.x < 0) st.cur.x = 0; if (st.cur.x > maxX) st.cur.x = maxX; }
-function onDown(e){ const p=getPoint(e); if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); return; } touch={active:true,x0:p.x,y0:p.y,x:p.x,y:p.y,moved:false,t0:performance.now(),accumX:0, swipingDown:false, gesture:null}; e.preventDefault(); }
-function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true; const totalDx=Math.abs(p.x-touch.x0), totalDy=Math.abs(p.y-touch.y0); if(!touch.gesture){ if(totalDy > SWIPE_DOWN_PX && totalDy > totalDx * 1.2){ touch.gesture='swipeDown'; touch.swipingDown=true; } else if(totalDx > settings.hstep && totalDx > totalDy){ touch.gesture='dragX'; } }
-  const allowHorizontal = !(touch.gesture==='swipeDown' && settings.dropMode==='hard');
-  if(allowHorizontal){ touch.accumX += dx; while(Math.abs(touch.accumX) >= settings.hstep){ const step = touch.accumX>0 ? 1 : -1; tryMove(step,0); touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep); } clampX(); }
-  if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){
-    st.softDropping = true; // handled in loop
-  }
-  e.preventDefault(); }
-function onUp(e){ if(!touch.active) return; touch.active=false; if(st.over) return; if(touch.gesture==='swipeDown'){ if(settings.dropMode==='hard'){ hardDrop(); } else { st.softDropping=false; } return; } const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0); const duration=performance.now()-touch.t0; if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); } e.preventDefault(); }
-canvas.addEventListener('touchstart', onDown, {passive:false}); canvas.addEventListener('touchmove',  onMove, {passive:false}); canvas.addEventListener('touchend',   onUp,   {passive:false}); canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
-// Allow tapping the overlay to restart when GAME OVER (but not to toggle pause)
-pauseOverlay.addEventListener('touchstart', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } }, {passive:false});
-pauseOverlay.addEventListener('mousedown', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } });
-
-/* ====================== INPUT: keyboard (desktop) ====================== */
-window.addEventListener('keydown', (e)=>{ if(st.paused) return; const k = e.key; if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k)) e.preventDefault(); if(k==='ArrowLeft'){ tryMove(-1,0); } else if(k==='ArrowRight'){ tryMove(1,0); } else if(k==='ArrowUp'){ tryRotate(); } else if(k==='ArrowDown'){ if(!st.softDropping) softDropStep(); st.softDropping = true; } else if(k===' '){ hardDrop(); } });
-window.addEventListener('keyup', (e)=>{ if(e.key==='ArrowDown'){ st.softDropping = false; } });
-
-/* ====================== UI & PWA ====================== */
-btn.addEventListener('click', ()=> togglePause());
-function togglePause(){ if(st.over) return; st.paused=!st.paused; pauseOverlay.style.display=st.paused?'flex':'none'; pauseOverlay.textContent = st.paused ? 'PAUSED' : ''; }
-function gameOver(){ st.over=true; st.paused=true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='GAME OVER\nTap to restart'; }
-
-let deferredPrompt=null;
-window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
-installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
-
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa9'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
-
-/* ====================== START ====================== */
-startGame();
-dbg('boot ok ' + VERSION);
-</script></body>
-</html>
+function
