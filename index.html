@@ -4,22 +4,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0e0e12" id="themeColor" />
   <link rel="manifest" href="manifest.json">
-  <title>Falling Blocks – v8.6a PWA<\/title>
+  <title>Falling Blocks – v8.6b PWA</title>
   <style>
     :root{ --bg:#0e0e12; --panel:#14141b; --card:#1a1a22; --fg:#e9e9ef; --acc:#3a86ff; --grid:#ffffff14; }
     [data-theme="light"]{ --bg:#f7f7fb; --panel:#ffffff; --card:#ffffff; --fg:#0f1020; --acc:#3a86ff; --grid:#00000014; }
     html, body { margin:0; padding:0; background:var(--bg); height:100%; color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
     #wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px }
-    #hud { display:flex; width:100%; max-width:520px; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap }
+    #hud { display:flex; width:100%; max-width:560px; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap }
     .box { background:var(--card); padding:8px 10px; border-radius:12px; min-width:88px; text-align:center }
     .big { font-weight:800; font-size:18px }
     .pill { background:rgba(58,134,255,.16); border:1px solid rgba(58,134,255,.35); color:var(--fg); padding:6px 10px; border-radius:999px; font-weight:700; font-size:13px; display:none }
     button { appearance:none; border:0; background:var(--acc); color:#fff; padding:10px 14px; font-weight:800; border-radius:12px }
     #game { position:relative }
     canvas { background:var(--panel); border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.2); touch-action:none }
-    #hint { opacity:.75; font-size:12px; text-align:center; max-width:520px; line-height:1.3 }
+    #hint { opacity:.75; font-size:12px; text-align:center; max-width:560px; line-height:1.3 }
     #pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); border-radius:16px; font-size:20px; font-weight:800; text-align:center; white-space:pre-line; padding:20px; z-index:10 }
-    dialog { border:0; border-radius:16px; background:var(--card); color:var(--fg); width:min(92vw, 520px); }
+    dialog { border:0; border-radius:16px; background:var(--card); color:var(--fg); width:min(92vw, 560px); }
     dialog::backdrop { background:rgba(0,0,0,.45); }
     .row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; }
     .row + .row { border-top: 1px solid #26263522; }
@@ -27,7 +27,6 @@
     input[type=range] { width: 160px; }
     select, input[type=checkbox] { accent-color: var(--acc); }
     .muted { opacity:.7; font-size:12px; }
-    .nextBox { position:absolute; left: calc(10px + 10*1px); }
   </style>
 </head>
 <body>
@@ -49,7 +48,7 @@
       <div class="pill" id="comboPill" style="position:absolute; right:8px; top:8px; z-index:5; pointer-events:none; display:none">Combo x1</div>
     </div>
     <div id="hint">Mobile: drag ←/→ to move • Tap = rotate • Swipe ↓ = drop (soft/hard in Options). Desktop: ←/→ move, ↑ rotate, ↓ soft-drop, Space hard-drop</div>
-    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:520px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] boot</div>
+    <div id="debug" style="display:none;font-family:monospace; font-size:12px; max-width:560px; background:#0006; padding:6px 8px; border-radius:8px; white-space:pre-wrap">[DEBUG] boot</div>
   </div>  <dialog id="optModal">
     <form method="dialog" style="padding:16px">
       <h3 style="margin-top:0">Options <span class="muted" id="ver"></span></h3>
@@ -66,11 +65,11 @@
       </div>
       <div class="row">
         <label for="softFactor">Soft-drop speed (factor)</label>
-        <div><input id="softFactor" type="range" min="0.05" max="1.0" step="0.05"><span id="softFactorVal" style="margin-left:10px"></span></div>
+        <div><input id="softFactor" type="range" min="0.1" max="0.6" step="0.05"><span id="softFactorVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
         <label for="softMin">Soft-drop min (ms)</label>
-        <div><input id="softMin" type="range" min="30" max="300" step="10"><span id="softMinVal" style="margin-left:10px"></span></div>
+        <div><input id="softMin" type="range" min="60" max="200" step="10"><span id="softMinVal" style="margin-left:10px"></span></div>
       </div>
       <div class="row">
         <label for="randSel">Piece randomizer</label>
@@ -121,14 +120,15 @@
     </form>
   </dialog><script>
 /* ====================== VERSION ====================== */
-const VERSION = 'v8.6';
+const VERSION = 'v8.6b';
 
 /* ====================== SETTINGS & THEME ====================== */
-const SETTINGS_KEY='fb_settings_v86';
+const SETTINGS_KEY='fb_settings_v86b';
 const DefaultSettings = {
   hstep:18, dropMode:'hard', debug:false, grid:true, theme:'dark', startLevel:0,
   lockDelay:500, lockStyle:'nes', lockMaxResets:15,
-  softFactor:0.25, softMin:80,
+  // Faster soft drop by default (clearly different from gravity)
+  softFactor:0.35, softMin:90,
   randomizer:'bag'
 };
 let settings = loadSettings();
@@ -201,8 +201,8 @@ function refreshOptionsUI(){
 refreshOptionsUI();
 
 optBtn.addEventListener('click', ()=>{ 
-  refreshOptionsUI(); 
-  // Auto-pause when opening Options
+  refreshOptionsUI();
+  // auto-pause when opening Options
   if(!st.over){ st.paused = true; pauseOverlay.style.display='flex'; pauseOverlay.textContent='PAUSED'; }
   optModal.showModal(); 
 });
@@ -216,18 +216,17 @@ document.getElementById('saveBtn').addEventListener('click', (e)=>{
   settings.softFactor = parseFloat(softFactorInput.value); settings.softMin = parseInt(softMinInput.value,10);
   settings.randomizer = randSel.value;
   saveSettings(); applyTheme(); refreshOptionsUI(); optModal.close();
-  if(st.paused||st.over) { startGame(); pauseOverlay.style.display='none'; }
 });
 lockStyleSel.addEventListener('change', ()=>{ settings.lockStyle = lockStyleSel.value; refreshOptionsUI(); });
 lockDelayInput.addEventListener('input', ()=>{ lockDelayVal.textContent = lockDelayInput.value+' ms'; });
 lockMaxResetsInput.addEventListener('input', ()=>{ lockMaxVal.textContent = lockMaxResetsInput.value; });
 softFactorInput.addEventListener('input', ()=>{ softFactorVal.textContent = parseFloat(softFactorInput.value).toFixed(2); });
 softMinInput.addEventListener('input', ()=>{ softMinVal.textContent = softMinInput.value+' ms'; });
-randSel.addEventListener('change', ()=>{ /* apply on next spawn */ });
+randSel.addEventListener('change', ()=>{ /* applied on next refill */ });
 
 /* ====================== LAYOUT ====================== */
 let CELL=28, SIDE_W=0, TOTAL_W=0, TOTAL_H=0;
-function resizeCanvas(){ const maxW=Math.min(520, window.innerWidth-20); CELL=Math.floor(maxW/(COLS+6)); SIDE_W=CELL*5; TOTAL_W=CELL*COLS + SIDE_W + CELL; TOTAL_H=CELL*(ROWS+2); canvas.width=TOTAL_W; canvas.height=TOTAL_H; dbg('resize: CELL='+CELL+' W='+TOTAL_W+' H='+TOTAL_H); }
+function resizeCanvas(){ const maxW=Math.min(560, window.innerWidth-20); CELL=Math.floor(maxW/(COLS+6)); SIDE_W=CELL*5; TOTAL_W=CELL*COLS + SIDE_W + CELL; TOTAL_H=CELL*(ROWS+2); canvas.width=TOTAL_W; canvas.height=TOTAL_H; dbg('resize: CELL='+CELL+' W='+TOTAL_W+' H='+TOTAL_H); }
 window.addEventListener('resize', resizeCanvas); resizeCanvas();
 
 /* ====================== PIECES ====================== */
@@ -279,42 +278,34 @@ function commitClearRows(rows){ if (!rows || !rows.length) { st.combo = 0; spawn
 function lockPiece(){ const s=currentShape(); let overflow=false; for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const by=st.cur.y+y; if(by<0){ overflow=true; } else { st.board[by][st.cur.x+x]=st.cur.color; } } } } st.grounded=false; st.lockT=0; st.lockResets=0; if(overflow){ return gameOver(); } const rows = getFullRows(); if(rows.length){ startClearAnim(rows); } else { st.combo = 0; spawnFromNext(); refillNext(); } }
 
 /* ====================== DRAW ====================== */
-function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#14141b'; ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4);
-  // Emphasized border around playfield
+function draw(){ const offX=CELL, offY=CELL; ctx.clearRect(0,0,canvas.width,canvas.height);
+  // playfield background
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#14141b';
+  ctx.fillRect(offX-2,offY-2,CELL*COLS+4,CELL*ROWS+4);
+  // emphasized border
   ctx.lineWidth = Math.max(3, Math.floor(CELL*0.12));
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim()||'#3a86ff';
   ctx.strokeRect(offX-2.5, offY-2.5, CELL*COLS+5, CELL*ROWS+5);
+
   // side panel box for NEXT
-  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#1a1a22';
   const sideX = offX + COLS*CELL + CELL*0.5;
   const sideY = offY;
-  const sideW = CELL*4.5;
-  const sideH = CELL*5.5;
+  const sideW = CELL*4.8;
+  const sideH = CELL*6.0;
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#1a1a22';
   roundRect(ctx, sideX, sideY, sideW, sideH, 12, true, false);
   ctx.font = 'bold '+Math.floor(CELL*0.7)+'px system-ui';
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#e9e9ef';
   ctx.fillText('NEXT', sideX + CELL*0.4, sideY + CELL*1.2);
 
+  // grid
   if(settings.grid){ ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#ffffff14'; ctx.lineWidth=1; for(let x=0;x<=COLS;x++){ ctx.beginPath(); ctx.moveTo(offX+x*CELL, offY); ctx.lineTo(offX+x*CELL, offY+ROWS*CELL); ctx.stroke(); } for(let y=0;y<=ROWS;y++){ ctx.beginPath(); ctx.moveTo(offX, offY+y*CELL); ctx.lineTo(offX+COLS*CELL, offY+y*CELL); ctx.stroke(); } }
+  // board blocks
   for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const v=st.board[y][x]; if(v){ drawCell(offX+x*CELL, offY+y*CELL, COLORS[v], 1); } } }
   // ghost + current
   if(st.cur){ let gy=st.cur.y; while(!collides(st.cur,0,gy-st.cur.y+1,st.cur.r)) gy++; const s=currentShape(); for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(gy+y)*CELL; if(gy+y>=0) drawCell(px,py,COLORS[st.cur.color], 0.25); } } } for(let y=0;y<s.length;y++){ for(let x=0;x<s[0].length;x++){ if(s[y][x]){ const px=offX+(st.cur.x+x)*CELL, py=offY+(st.cur.y+y)*CELL; if(st.cur.y+y>=0) drawCell(px,py,COLORS[st.cur.color], 1); } } } }
-  // draw NEXT preview
-  if(st.next){
-    const s=ROT[st.next.type][0];
-    const nrows=s.length, ncols=s[0].length;
-    const cell=Math.floor(CELL*0.8);
-    const gap = Math.max(2, Math.floor(cell*0.08));
-    const ox = sideX + (sideW - ncols*cell)/2;
-    const oy = sideY + CELL*1.8;
-    for(let y=0;y<nrows;y++){
-      for(let x=0;x<ncols;x++){
-        if(s[y][x]){
-          drawCellNext(ox + x*cell + gap/2, oy + y*cell + gap/2, cell - gap, cell - gap, COLORS[st.next.color]);
-        }
-      }
-    }
-  }
+  // draw NEXT preview with gaps
+  if(st.next){ const s=ROT[st.next.type][0]; const nrows=s.length, ncols=s[0].length; const cell=Math.floor(CELL*0.85); const gap = Math.max(2, Math.floor(cell*0.1)); const ox = sideX + (sideW - ncols*cell)/2; const oy = sideY + CELL*1.9; for(let y=0;y<nrows;y++){ for(let x=0;x<ncols;x++){ if(s[y][x]){ drawCellNext(ox + x*cell + gap/2, oy + y*cell + gap/2, cell - gap, cell - gap, COLORS[st.next.color]); } } } }
   // row flash
   if(st.clearAnim){ const p = Math.min(1, st.clearAnim.t / st.clearAnim.dur); const alpha = 0.5 * (1 - p); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff'; for(const y of st.clearAnim.rows){ const rowY = offY + y*CELL; ctx.fillRect(offX, rowY, COLS*CELL, CELL); } ctx.globalAlpha = 1; }
 }
@@ -325,16 +316,7 @@ function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(w<2*r) r=w/2; if(h<2*r) r=h/2;
 /* ====================== LOOP ====================== */
 let lastTs=performance.now();
 function beginGrounding(){ if(!st.grounded){ st.grounded=true; st.lockT=0; st.lockResets=0; } }
-function onGroundNudge(){
-  if(!collides(st.cur,0,1,st.cur.r)){
-    st.grounded=false; st.lockT=0; return;
-  }
-  st.lockT=0;
-  if(settings.lockStyle==='modern'){
-    st.lockResets++;
-    if(st.lockResets>=settings.lockMaxResets){ lockPiece(); }
-  }
-}
+function onGroundNudge(){ if(!collides(st.cur,0,1,st.cur.r)){ st.grounded=false; st.lockT=0; return; } st.lockT=0; if(settings.lockStyle==='modern'){ st.lockResets++; if(st.lockResets>=settings.lockMaxResets){ lockPiece(); } } }
 function loop(ts){ const dt=ts-lastTs; lastTs=ts; if(st.clearAnim){ st.clearAnim.t += dt; st.accMs = 0; if(st.clearAnim.t >= st.clearAnim.dur && st.clearAnim.active){ st.clearAnim.active = false; const rows = st.clearAnim.rows.slice(); commitClearRows(rows); } } else { if(!st.paused){ const effMs = st.softDropping ? Math.max(settings.softMin, st.dropMs * settings.softFactor) : st.dropMs; st.accMs += dt; if(st.accMs >= effMs){ st.accMs = 0; if(!tryMove(0,1)){ beginGrounding(); } else { st.grounded=false; st.lockT=0; } } if(st.grounded){ if(!collides(st.cur,0,1,st.cur.r)){ st.grounded=false; st.lockT=0; } else { st.lockT += dt; if(st.lockT >= settings.lockDelay){ lockPiece(); } } } } } draw(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
@@ -346,13 +328,11 @@ function onDown(e){ const p=getPoint(e); if(st.over){ startGame(); pauseOverlay.
 function onMove(e){ if(!touch.active) return; const p=getPoint(e); const dx=p.x-touch.x; const dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(Math.hypot(p.x-touch.x0,p.y-touch.y0)>TAP_MAX_RADIUS) touch.moved=true; const totalDx=Math.abs(p.x-touch.x0), totalDy=Math.abs(p.y-touch.y0); if(!touch.gesture){ if(totalDy > SWIPE_DOWN_PX && totalDy > totalDx * 1.2){ touch.gesture='swipeDown'; touch.swipingDown=true; } else if(totalDx > settings.hstep && totalDx > totalDy){ touch.gesture='dragX'; } }
   const allowHorizontal = !(touch.gesture==='swipeDown' && settings.dropMode==='hard');
   if(allowHorizontal){ touch.accumX += dx; while(Math.abs(touch.accumX) >= settings.hstep){ const step = touch.accumX>0 ? 1 : -1; tryMove(step,0); touch.accumX += (touch.accumX>0 ? -settings.hstep : settings.hstep); } clampX(); }
-  if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){
-    st.softDropping = true; // handled in loop
-  }
+  if(touch.gesture==='swipeDown' && settings.dropMode==='soft'){ st.softDropping = true; }
   e.preventDefault(); }
 function onUp(e){ if(!touch.active) return; touch.active=false; if(st.over) return; if(touch.gesture==='swipeDown'){ if(settings.dropMode==='hard'){ hardDrop(); } else { st.softDropping=false; } return; } const totalDx=Math.abs(touch.x-touch.x0), totalDy=Math.abs(touch.y-touch.y0); const duration=performance.now()-touch.t0; if(totalDx<TAP_MAX_MOVE && totalDy<TAP_MAX_MOVE && duration<=TAP_MAX_MS){ tryRotate(); } e.preventDefault(); }
 canvas.addEventListener('touchstart', onDown, {passive:false}); canvas.addEventListener('touchmove',  onMove, {passive:false}); canvas.addEventListener('touchend',   onUp,   {passive:false}); canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
-// Allow tapping the overlay to restart when GAME OVER (but not to toggle pause)
+// Tap/click overlay to restart on GAME OVER (not for pause toggle)
 pauseOverlay.addEventListener('touchstart', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } }, {passive:false});
 pauseOverlay.addEventListener('mousedown', (e)=>{ if(st.over){ startGame(); pauseOverlay.style.display='none'; e.preventDefault(); } });
 
@@ -369,7 +349,7 @@ let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block'; });
 installBtn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; installBtn.style.display='none'; });
 
-if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa9'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
+if('serviceWorker' in navigator){ const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'; if(secure){ const basePath = (function(){ const p=location.pathname; return p.endsWith('/')? p : p.replace(/[^/]*$/, ''); })(); const swPath = basePath + 'sw.js?v=8pwa10'; navigator.serviceWorker.register(swPath).catch(err=>console.warn('[FB] SW error', err)); } }
 
 /* ====================== START ====================== */
 startGame();
